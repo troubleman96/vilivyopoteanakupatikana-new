@@ -59,11 +59,11 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8 animate-fade-in">
           {/* Logo */}
           <div className="text-center">
-            <div className="inline-flex items-center justify-center mb-4">
+            <div className="flex justify-center mb-4">
               <img
                 src="/vilivyopoteanakupatikana_favicon/web-app-manifest-192x192.png"
                 alt="TZ UniFind Logo"
-                className="h-16 w-16 rounded-2xl shadow-lg border-2 border-primary/10"
+                className="h-20 w-20 object-contain"
               />
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">
