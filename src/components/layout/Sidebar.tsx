@@ -43,7 +43,12 @@ const navigationItems = {
   ],
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  className?: string;
+  onLinkClick?: () => void;
+}
+
+export function Sidebar({ className, onLinkClick }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
@@ -65,7 +70,7 @@ export function Sidebar() {
   const badge = getRoleBadge();
 
   return (
-    <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground">
+    <div className={cn("flex h-full w-full flex-col bg-sidebar text-sidebar-foreground", className)}>
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary">
@@ -106,6 +111,7 @@ export function Sidebar() {
               <li key={item.name}>
                 <Link
                   to={item.href}
+                  onClick={onLinkClick}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                     isActive
