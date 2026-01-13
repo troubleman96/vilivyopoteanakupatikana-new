@@ -24,7 +24,7 @@ export default function Login() {
   const handleEmailChange = (value: string) => {
     setEmail(value);
     setError('');
-    
+
     if (value && value.includes('@')) {
       const validation = validateEmail(value);
       setEmailError(validation.valid ? '' : validation.error || '');
@@ -42,7 +42,7 @@ export default function Login() {
     await new Promise((resolve) => setTimeout(resolve, 800));
 
     const result = login(email, password);
-    
+
     if (result.success) {
       navigate('/dashboard');
     } else {
@@ -59,8 +59,12 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8 animate-fade-in">
           {/* Logo */}
           <div className="text-center">
-            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-secondary mb-4">
-              <Shield className="h-8 w-8 text-primary-foreground" />
+            <div className="inline-flex items-center justify-center mb-4">
+              <img
+                src="/vilivyopoteanakupatikana_favicon/web-app-manifest-192x192.png"
+                alt="TZ UniFind Logo"
+                className="h-16 w-16 rounded-2xl shadow-lg border-2 border-primary/10"
+              />
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">
               TZ UniFind

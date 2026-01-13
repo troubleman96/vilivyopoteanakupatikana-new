@@ -73,8 +73,12 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
     <div className={cn("flex h-full w-full flex-col bg-sidebar text-sidebar-foreground", className)}>
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary">
-          <Shield className="h-5 w-5 text-sidebar-primary-foreground" />
+        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-background border border-sidebar-border shadow-sm">
+          <img
+            src="/vilivyopoteanakupatikana_favicon/favicon-96x96.png"
+            alt="Logo"
+            className="h-full w-full object-cover"
+          />
         </div>
         <div className="flex flex-col">
           <span className="font-display font-bold text-sm">TZ UniFind</span>
