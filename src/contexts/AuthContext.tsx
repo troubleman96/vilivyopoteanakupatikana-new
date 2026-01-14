@@ -1,94 +1,142 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserRole } from '@/types';
-import { users, universities } from '@/data/mockData';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { User } from '@/types';
+import api from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => { success: boolean; error?: string };
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   validateEmail: (email: string) => { valid: boolean; error?: string };
+  checkDomain: (email: string) => Promise<{ registered: boolean; universityName?: string; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      console.log('AuthContext: Starting fetchProfile');
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          const response = await api.get('/auth/profile/');
+          console.log('AuthContext: Profile fetch response', response.data);
+          if (response.data.success) {
+            setUser(response.data.data);
+          }
+        } catch (error) {
+          console.error('AuthContext: Failed to fetch profile:', error);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
+      } else {
+        console.log('AuthContext: No token found');
+      }
+      console.log('AuthContext: Setting isLoading to false');
+      setIsLoading(false);
+    };
+
+    fetchProfile();
+  }, []);
 
   const validateEmail = (email: string): { valid: boolean; error?: string } => {
-    // Check if email ends with @ac.tz (Tanzanian academic domain)
     const emailLower = email.toLowerCase().trim();
-    
+
     if (!emailLower.includes('@')) {
       return { valid: false, error: 'Please enter a valid email address' };
     }
 
+    // Backend handles domain validation now, but we can still suggest .ac.tz
     if (!emailLower.endsWith('.ac.tz')) {
-      return { 
-        valid: false, 
-        error: 'Only university emails ending with @xxx.ac.tz are allowed. Example: admin@udsm.ac.tz' 
-      };
-    }
-
-    // Check if the domain is from a registered university
-    const domain = emailLower.split('@')[1];
-    const university = universities.find(u => u.emailDomain === domain);
-    
-    if (!university) {
-      return { 
-        valid: false, 
-        error: `The domain "${domain}" is not registered. Please contact the Super Admin to register your university.` 
-      };
-    }
-
-    if (!university.isActive) {
-      return { 
-        valid: false, 
-        error: `${university.name} is currently inactive. Please contact the Super Admin.` 
+      return {
+        valid: true, // Allow it, but maybe warn or just let checkDomain handle it
+        error: undefined
       };
     }
 
     return { valid: true };
   };
 
-  const login = (email: string, password: string): { success: boolean; error?: string } => {
-    const emailLower = email.toLowerCase().trim();
+  const checkDomain = async (email: string): Promise<{ registered: boolean; universityName?: string; error?: string }> => {
+    try {
+      const domain = email.split('@')[1];
+      console.log('AuthContext: checkDomain called for:', email, 'domain:', domain);
+      if (!domain) return { registered: false };
 
-    // Special case for super admin (demo purposes)
-    if (emailLower === 'superadmin@system.ac.tz') {
-      const superAdmin = users.find(u => u.role === 'super_admin');
-      if (superAdmin && password === 'admin123') {
-        setUser(superAdmin);
-        return { success: true };
+      const response = await api.get('/auth/check-domain/', { params: { email } });
+      console.log('AuthContext: checkDomain RAW response:', JSON.stringify(response.data, null, 2));
+
+      // Handle both flat and nested formats
+      const data = response.data.data || response.data;
+
+      if (response.data.success && data) {
+        return {
+          registered: !!data.registered,
+          universityName: data.university_name || data.universityName
+        };
       }
-    }
-
-    // Validate email domain
-    const validation = validateEmail(emailLower);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-
-    // Find user in mock data
-    const foundUser = users.find(u => u.email.toLowerCase() === emailLower);
-    
-    if (!foundUser) {
-      return { 
-        success: false, 
-        error: 'No account found with this email. Contact your University Admin for access.' 
+      return { registered: false };
+    } catch (error: any) {
+      console.error('AuthContext: Domain check failed:', error);
+      return {
+        registered: false,
+        error: error.response?.data?.message || 'Domain check failed'
       };
     }
-
-    // Demo password check (in production, this would be proper auth)
-    if (password !== 'password123' && password !== 'admin123') {
-      return { success: false, error: 'Invalid password' };
-    }
-
-    setUser(foundUser);
-    return { success: true };
   };
 
-  const logout = () => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      console.log('AuthContext: login called for:', email);
+      const response = await api.post('/auth/login/', {
+        email: email.toLowerCase().trim(),
+        password,
+      });
+      console.log('AuthContext: Login API response:', response.data);
+
+      if (response.data.success && response.data.data) {
+        const { access, refresh } = response.data.data;
+        localStorage.setItem('access_token', access);
+        localStorage.setItem('refresh_token', refresh);
+        console.log('AuthContext: Tokens saved to localStorage');
+
+        // Fetch profile to get user details
+        console.log('AuthContext: Fetching profile after successful login...');
+        const profileResponse = await api.get('/auth/profile/');
+        console.log('AuthContext: Post-login profile response:', profileResponse.data);
+        if (profileResponse.data.success && profileResponse.data.data) {
+          setUser(profileResponse.data.data);
+          console.log('AuthContext: User state updated, login success');
+          return { success: true };
+        }
+      }
+      console.warn('AuthContext: Login failed - success flag false or data missing');
+      return { success: false, error: response.data.message || 'Login failed' };
+    } catch (error: any) {
+      console.error('AuthContext: Login exception:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Invalid email or password'
+      };
+    }
+  };
+
+  const logout = async () => {
+    const refresh = localStorage.getItem('refresh_token');
+    if (refresh) {
+      try {
+        await api.post('/auth/logout/', { refresh });
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    }
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setUser(null);
   };
 
@@ -96,11 +144,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       isAuthenticated: !!user,
+      isLoading,
       login,
       logout,
       validateEmail,
+      checkDomain,
     }}>
-      {children}
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 }

@@ -54,8 +54,6 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
 
   if (!user) return null;
 
-  const navItems = navigationItems[user.role];
-
   const getRoleBadge = () => {
     switch (user.role) {
       case 'super_admin':
@@ -64,10 +62,13 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
         return { label: 'Uni Admin', className: 'bg-secondary/20 text-secondary' };
       case 'security_officer':
         return { label: 'Security', className: 'bg-info/20 text-info' };
+      default:
+        return { label: 'User', className: 'bg-muted text-muted-foreground' };
     }
   };
 
   const badge = getRoleBadge();
+  const navItems = navigationItems[user.role as keyof typeof navigationItems] || [];
 
   return (
     <div className={cn("flex h-full w-full flex-col bg-sidebar text-sidebar-foreground", className)}>
@@ -91,11 +92,11 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent">
             <span className="text-sm font-semibold">
-              {user.name.split(' ').map(n => n[0]).join('')}
+              {(user.name || user.username || 'U').split(' ').map(n => n[0]).join('')}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user.name}</p>
+            <p className="text-sm font-medium truncate">{user.name || user.username}</p>
             <span className={cn(
               'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
               badge.className

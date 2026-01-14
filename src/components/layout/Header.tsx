@@ -2,7 +2,7 @@ import { Bell, Search, HelpCircle, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { universities } from '@/data/mockData';
+
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
 import { useState } from 'react';
@@ -11,9 +11,7 @@ export function Header() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
-  const university = user?.universityId
-    ? universities.find((u) => u.id === user.universityId)
-    : null;
+  const universityName = user?.university_name || '';
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-border bg-background px-6">
@@ -31,10 +29,10 @@ export function Header() {
           </SheetContent>
         </Sheet>
 
-        {university && (
+        {universityName && (
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/10 text-secondary border border-secondary/20">
             <div className="h-2 w-2 rounded-full bg-secondary animate-pulse" />
-            <span className="text-sm font-semibold tracking-wide uppercase">{university.shortName}</span>
+            <span className="text-sm font-semibold tracking-wide uppercase">{universityName}</span>
           </div>
         )}
       </div>

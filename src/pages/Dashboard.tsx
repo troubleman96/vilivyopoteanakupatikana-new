@@ -1,5 +1,4 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { getDashboardStats, lostItems, foundItems, universities, auditLogs } from '@/data/mockData';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
@@ -14,14 +13,71 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const stats = getDashboardStats(user?.role === 'super_admin' ? undefined : user?.universityId);
 
-  const recentLost = lostItems.slice(0, 5);
-  const recentFound = foundItems.slice(0, 5);
-  const recentLogs = auditLogs.slice(0, 5);
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const response = await api.get('/management/dashboard/stats/');
+      return response.data.data;
+    },
+  });
+
+  const { data: lostItemsData, isLoading: lostLoading } = useQuery({
+    queryKey: ['recent-lost'],
+    queryFn: async () => {
+      const response = await api.get('/items/', {
+        params: { item_type: 'lost', limit: 5 },
+      });
+      return response.data.data?.results || [];
+    },
+  });
+
+  const { data: foundItemsData, isLoading: foundLoading } = useQuery({
+    queryKey: ['recent-found'],
+    queryFn: async () => {
+      const response = await api.get('/items/', {
+        params: { item_type: 'found', limit: 5 },
+      });
+      return response.data.data?.results || [];
+    },
+  });
+
+  const { data: logsData, isLoading: logsLoading } = useQuery({
+    queryKey: ['recent-logs'],
+    queryFn: async () => {
+      const response = await api.get('/management/audit-logs/', {
+        params: { limit: 5 },
+      });
+      return response.data.data?.results || [];
+    },
+  });
+
+  const { data: universitiesData, isLoading: uniLoading } = useQuery({
+    queryKey: ['universities'],
+    queryFn: async () => {
+      const response = await api.get('/universities/');
+      return response.data.data?.results || [];
+    },
+    enabled: user?.role === 'super_admin',
+  });
+
+  const stats = statsData || {
+    total_lost_items: 0,
+    total_found_items: 0,
+    pending_verifications: 0,
+    matched_items: 0,
+    returned_items: 0,
+  };
+
+  const recentLost = (lostItemsData || []).slice(0, 5);
+  const recentFound = (foundItemsData || []).slice(0, 5);
+  const recentLogs = (logsData || []).slice(0, 5);
+  const unis = (universitiesData || []).slice(0, 5);
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -36,12 +92,12 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">
-            {greeting()}, {user?.name.split(' ')[0]}
+            {greeting()}, {user?.username || 'Admin'}
           </h1>
           <p className="text-muted-foreground mt-1">
             {user?.role === 'super_admin'
               ? 'System-wide overview of all universities'
-              : "Here's what's happening at your university today"}
+              : `Here's what's happening at ${user?.university_name || 'your university'} today`}
           </p>
         </div>
         <div className="flex gap-3">
@@ -58,40 +114,46 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
           title="Lost Items"
-          value={stats.totalLostItems}
+          value={stats.total_lost_items ?? 0}
           icon={AlertTriangle}
           variant="default"
+          isLoading={statsLoading}
         />
         <StatCard
           title="Found Items"
-          value={stats.totalFoundItems}
+          value={stats.total_found_items ?? 0}
           icon={Package}
           variant="default"
+          isLoading={statsLoading}
         />
         <StatCard
           title="Pending"
-          value={stats.pendingVerifications}
+          value={stats.pending_verifications ?? 0}
           icon={Clock}
           variant="warning"
+          isLoading={statsLoading}
         />
         <StatCard
           title="Matched"
-          value={stats.matchedItems}
+          value={stats.matched_items ?? 0}
           icon={Link2}
           variant="primary"
+          isLoading={statsLoading}
         />
         <StatCard
           title="Returned"
-          value={stats.returnedItems}
+          value={stats.returned_items ?? 0}
           icon={CheckCircle}
           variant="success"
+          isLoading={statsLoading}
         />
         {user?.role === 'super_admin' && (
           <StatCard
             title="Universities"
-            value={stats.activeUniversities}
+            value={unis.length}
             icon={Building2}
             variant="secondary"
+            isLoading={uniLoading}
           />
         )}
       </div>
@@ -112,18 +174,27 @@ export default function Dashboard() {
             </Button>
           </div>
           <div className="space-y-3">
-            {recentLost.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.location}</p>
-                </div>
-                <StatusBadge status={item.status} />
-              </div>
-            ))}
+            {lostLoading ? (
+              <p className="text-sm text-muted-foreground">Loading items...</p>
+            ) : recentLost.length > 0 ? (
+              recentLost.map((item: any) => {
+                if (!item) return null;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.location || item.location_display || 'No location'}</p>
+                    </div>
+                    <StatusBadge status={item.status} />
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">No recent lost items.</p>
+            )}
           </div>
         </div>
 
@@ -141,18 +212,27 @@ export default function Dashboard() {
             </Button>
           </div>
           <div className="space-y-3">
-            {recentFound.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.location}</p>
-                </div>
-                <StatusBadge status={item.status} />
-              </div>
-            ))}
+            {foundLoading ? (
+              <p className="text-sm text-muted-foreground">Loading items...</p>
+            ) : recentFound.length > 0 ? (
+              recentFound.map((item: any) => {
+                if (!item) return null;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.location || item.location_display || 'No location'}</p>
+                    </div>
+                    <StatusBadge status={item.status} />
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">No recent found items.</p>
+            )}
           </div>
         </div>
       </div>
@@ -173,28 +253,39 @@ export default function Dashboard() {
             </Button>
           </div>
           <div className="space-y-4">
-            {recentLogs.map((log) => (
-              <div key={log.id} className="flex items-start gap-4 pb-4 border-b border-border/50 last:border-0 last:pb-0">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary flex-shrink-0">
-                  <Activity className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{log.details}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-muted-foreground">{log.userName}</span>
-                    <span className="text-xs text-muted-foreground">•</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(log.timestamp).toLocaleString('en-GB', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
+            {logsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading logs...</p>
+            ) : recentLogs.length > 0 ? (
+              recentLogs.map((log: any) => (
+                <div key={log.id} className="flex items-start gap-4 pb-4 border-b border-border/50 last:border-0 last:pb-0">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary flex-shrink-0">
+                    <Activity className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{log.details}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">{log.userName}</span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        {(() => {
+                          const dateStr = log.timestamp || log.created_at;
+                          if (!dateStr) return 'Recently';
+                          const date = new Date(dateStr);
+                          return isNaN(date.getTime()) ? 'Recently' : date.toLocaleString('en-GB', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          });
+                        })()}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No recent activity.</p>
+            )}
           </div>
         </div>
 
@@ -213,26 +304,31 @@ export default function Dashboard() {
               </Button>
             </div>
             <div className="space-y-3">
-              {universities.slice(0, 5).map((uni) => (
-                <div
-                  key={uni.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">{uni.shortName}</p>
-                    <p className="text-xs text-muted-foreground">{uni.activeItems} active items</p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                      uni.isActive
+              {uniLoading ? (
+                <p className="text-sm text-muted-foreground">Loading universities...</p>
+              ) : unis.length > 0 ? (
+                unis.map((uni: any) => (
+                  <div
+                    key={uni.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{uni.short_name || uni.name}</p>
+                      <p className="text-xs text-muted-foreground">{uni.active_items || 0} active items</p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${uni.active
                         ? 'bg-success/10 text-success'
                         : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {uni.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              ))}
+                        }`}
+                    >
+                      {uni.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No universities registered.</p>
+              )}
             </div>
           </div>
         ) : (

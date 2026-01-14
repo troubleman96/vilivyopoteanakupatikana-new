@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { lostItems } from '@/data/mockData';
-import { LostFoundItem, ItemStatus } from '@/types';
+import { LostFoundItem } from '@/types';
 import { ItemsTable } from '@/components/items/ItemsTable';
 import { ItemDetailsDialog } from '@/components/items/ItemDetailsDialog';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Filter, AlertTriangle, Download } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Download, Loader2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 
 export default function LostItems() {
   const { user } = useAuth();
@@ -23,25 +24,21 @@ export default function LostItems() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  // Filter items based on user role
-  const baseItems = user?.role === 'super_admin'
-    ? lostItems
-    : lostItems.filter((item) => item.universityId === user?.universityId);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['lost-items', statusFilter, categoryFilter, searchQuery],
+    queryFn: async () => {
+      const params: any = { item_type: 'lost' };
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (categoryFilter !== 'all') params.category = categoryFilter;
+      if (searchQuery) params.search = searchQuery;
 
-  // Apply filters
-  const filteredItems = baseItems.filter((item) => {
-    const matchesSearch =
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
-
-    return matchesSearch && matchesStatus && matchesCategory;
+      const response = await api.get('/items/', { params });
+      return response.data.data?.results || [];
+    },
   });
 
-  const categories = [...new Set(baseItems.map((item) => item.category))];
+  const items = data || [];
+  const categories = [...new Set(items.filter((i: any) => i && i.category).map((item: LostFoundItem) => item.category))];
 
   const handleViewDetails = (item: LostFoundItem) => {
     setSelectedItem(item);
@@ -49,7 +46,6 @@ export default function LostItems() {
   };
 
   const handleMatch = (item: LostFoundItem) => {
-    // In a real app, this would open a matching dialog
     console.log('Match item:', item);
   };
 
@@ -93,11 +89,10 @@ export default function LostItems() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="matched">Matched</SelectItem>
-              <SelectItem value="verified">Verified</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="potential_match">Potential Match</SelectItem>
+              <SelectItem value="claimed">Claimed</SelectItem>
               <SelectItem value="returned">Returned</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -106,7 +101,7 @@ export default function LostItems() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
+              {categories.map((cat: any) => (
                 <SelectItem key={cat} value={cat}>
                   {cat}
                 </SelectItem>
@@ -119,33 +114,48 @@ export default function LostItems() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total', value: baseItems.length, color: 'text-foreground' },
-          { label: 'Pending', value: baseItems.filter((i) => i.status === 'pending').length, color: 'text-warning' },
-          { label: 'Matched', value: baseItems.filter((i) => i.status === 'matched').length, color: 'text-info' },
-          { label: 'Returned', value: baseItems.filter((i) => i.status === 'returned').length, color: 'text-success' },
+          { label: 'Total', value: items.length, color: 'text-foreground' },
+          { label: 'Open', value: items.filter((i: any) => i.status === 'open' || i.status === 'pending').length, color: 'text-warning' },
+          { label: 'Matched', value: items.filter((i: any) => i.status === 'matched' || i.status === 'potential_match').length, color: 'text-info' },
+          { label: 'Returned', value: items.filter((i: any) => i.status === 'returned').length, color: 'text-success' },
         ].map((stat) => (
           <div key={stat.label} className="p-4 rounded-lg bg-card border border-border/50">
             <p className="text-sm text-muted-foreground">{stat.label}</p>
-            <p className={`text-2xl font-bold font-display ${stat.color}`}>{stat.value}</p>
+            <p className={`text-2xl font-bold font-display ${stat.color}`}>{isLoading ? '...' : stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Table */}
-      <ItemsTable
-        items={filteredItems}
-        onViewDetails={handleViewDetails}
-        onMatch={handleMatch}
-        showUniversity={user?.role === 'super_admin'}
-      />
-
-      {/* Empty State */}
-      {filteredItems.length === 0 && (
-        <div className="text-center py-12">
-          <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold">No items found</h3>
-          <p className="text-muted-foreground">Try adjusting your search or filters</p>
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading items...</p>
         </div>
+      ) : error ? (
+        <div className="text-center py-12">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-destructive">Error loading items</h3>
+          <p className="text-muted-foreground">Please try again later</p>
+        </div>
+      ) : (
+        <>
+          <ItemsTable
+            items={items}
+            onViewDetails={handleViewDetails}
+            onMatch={handleMatch}
+            showUniversity={user?.role === 'super_admin'}
+          />
+
+          {/* Empty State */}
+          {items.length === 0 && (
+            <div className="text-center py-12">
+              <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold">No items found</h3>
+              <p className="text-muted-foreground">Try adjusting your search or filters</p>
+            </div>
+          )}
+        </>
       )}
 
       {/* Details Dialog */}
@@ -154,7 +164,6 @@ export default function LostItems() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onMatch={() => {
-          // Handle match action
           setDialogOpen(false);
         }}
       />

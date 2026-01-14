@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Shield, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isAuthenticated, validateEmail } = useAuth();
+  const { login, isAuthenticated, validateEmail, checkDomain } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,13 +21,42 @@ export default function Login() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (email && email.includes('@')) {
+        const parts = email.split('@');
+        const domain = parts[1];
+
+        if (domain && domain.includes('.') && domain.length > 3) {
+          const validation = validateEmail(email);
+          if (validation.valid) {
+            console.log('Login: Calling checkDomain for email:', email);
+            const check = await checkDomain(email);
+            console.log('Login: checkDomain result:', check);
+            if (!check.registered) {
+              setEmailError(`The domain "${domain}" is not registered. Please contact the Super Admin to register your university.`);
+            } else {
+              setEmailError('');
+            }
+          }
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [email, validateEmail, checkDomain]);
+
   const handleEmailChange = (value: string) => {
     setEmail(value);
     setError('');
 
     if (value && value.includes('@')) {
       const validation = validateEmail(value);
-      setEmailError(validation.valid ? '' : validation.error || '');
+      if (!validation.valid) {
+        setEmailError(validation.error || '');
+      } else {
+        setEmailError('');
+      }
     } else {
       setEmailError('');
     }
@@ -36,16 +65,20 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (emailError) return;
+
     setIsLoading(true);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    const result = login(email, password);
+    console.log('Login: Attempting login for:', email);
+    const result = await login(email, password);
+    console.log('Login: Login result:', result);
 
     if (result.success) {
+      console.log('Login: Success, navigating to dashboard');
       navigate('/dashboard');
     } else {
+      console.error('Login: Failed:', result.error);
       setError(result.error || 'Login failed');
     }
 

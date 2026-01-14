@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { universities } from '@/data/mockData';
 import { University } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,8 @@ import {
   MoreHorizontal,
   Edit,
   Trash2,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Table,
@@ -38,21 +39,38 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 
 export default function Universities() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const filteredUniversities = universities.filter(
-    (uni) =>
-      uni.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      uni.shortName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      uni.emailDomain.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['universities', searchQuery],
+    queryFn: async () => {
+      const params: any = {};
+      if (searchQuery) params.search = searchQuery;
+      const response = await api.get('/universities/', { params });
+      return response.data.data?.results || [];
+    },
+  });
 
-  const handleToggleStatus = (uni: University) => {
-    toast.success(`${uni.shortName} ${uni.isActive ? 'disabled' : 'enabled'} successfully`);
+  const universitiesList = data || [];
+
+  const handleToggleStatus = async (uni: University) => {
+    try {
+      const newStatus = !(uni.is_active || uni.isActive);
+      const response = await api.patch(`/management/universities/${uni.id}/`, {
+        is_active: newStatus,
+      });
+      if (response.data.success) {
+        toast.success(`${uni.short_name || uni.shortName} ${newStatus ? 'enabled' : 'disabled'} successfully`);
+      }
+    } catch (error) {
+      toast.error('Failed to update university status');
+    }
   };
 
   return (
@@ -89,109 +107,121 @@ export default function Universities() {
       <div className="grid grid-cols-3 gap-4">
         <div className="p-4 rounded-lg bg-card border border-border/50">
           <p className="text-sm text-muted-foreground">Total Universities</p>
-          <p className="text-2xl font-bold font-display">{universities.length}</p>
+          <p className="text-2xl font-bold font-display">{isLoading ? '...' : universitiesList.length}</p>
         </div>
         <div className="p-4 rounded-lg bg-success/10 border border-success/20">
           <p className="text-sm text-success">Active</p>
           <p className="text-2xl font-bold font-display text-success">
-            {universities.filter((u) => u.isActive).length}
+            {isLoading ? '...' : universitiesList.filter((u: any) => u.is_active || u.isActive).length}
           </p>
         </div>
         <div className="p-4 rounded-lg bg-muted border border-border/50">
           <p className="text-sm text-muted-foreground">Inactive</p>
           <p className="text-2xl font-bold font-display">
-            {universities.filter((u) => !u.isActive).length}
+            {isLoading ? '...' : universitiesList.filter((u: any) => !(u.is_active || u.isActive)).length}
           </p>
         </div>
       </div>
 
       {/* Table */}
       <div className="table-container">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold">University</TableHead>
-              <TableHead className="font-semibold">Email Domain</TableHead>
-              <TableHead className="font-semibold">Campuses</TableHead>
-              <TableHead className="font-semibold">Active Items</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUniversities.map((uni) => (
-              <TableRow key={uni.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary/10">
-                      <Building2 className="h-5 w-5 text-secondary" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{uni.shortName}</p>
-                      <p className="text-sm text-muted-foreground">{uni.name}</p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <code className="text-sm bg-muted px-2 py-1 rounded">@{uni.emailDomain}</code>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{uni.campuses.length}</TableCell>
-                <TableCell>
-                  <span className="font-medium">{uni.activeItems}</span>
-                  <span className="text-muted-foreground"> / {uni.totalItems}</span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={uni.isActive}
-                      onCheckedChange={() => handleToggleStatus(uni)}
-                    />
-                    <span
-                      className={`text-sm ${
-                        uni.isActive ? 'text-success' : 'text-muted-foreground'
-                      }`}
-                    >
-                      {uni.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setSelectedUniversity(uni);
-                          setDetailsOpen(true);
-                        }}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-secondary" />
+            <p className="text-muted-foreground">Loading universities...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-destructive">Error loading universities</h3>
+            <p className="text-muted-foreground">Please try again later</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">University</TableHead>
+                <TableHead className="font-semibold">Email Domain</TableHead>
+                <TableHead className="font-semibold">Campuses</TableHead>
+                <TableHead className="font-semibold">Active Items</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {universitiesList.map((uni: University) => (
+                <TableRow key={uni.id} className="hover:bg-muted/30 transition-colors">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary/10">
+                        <Building2 className="h-5 w-5 text-secondary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{uni.short_name || uni.shortName}</p>
+                        <p className="text-sm text-muted-foreground">{uni.name}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <code className="text-sm bg-muted px-2 py-1 rounded">@{uni.email_domain || uni.emailDomain}</code>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{uni.campuses?.length || 0}</TableCell>
+                  <TableCell>
+                    <span className="font-medium">{uni.active_items || uni.activeItems || 0}</span>
+                    <span className="text-muted-foreground"> / {uni.total_items || uni.totalItems || 0}</span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={uni.is_active || uni.isActive}
+                        onCheckedChange={() => handleToggleStatus(uni)}
+                      />
+                      <span
+                        className={`text-sm ${(uni.is_active || uni.isActive) ? 'text-success' : 'text-muted-foreground'
+                          }`}
+                      >
+                        {(uni.is_active || uni.isActive) ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedUniversity(uni);
+                            setDetailsOpen(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       {/* Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-width-lg">
           <DialogHeader>
             <DialogTitle>{selectedUniversity?.name}</DialogTitle>
             <DialogDescription>University details and configuration</DialogDescription>
@@ -202,11 +232,11 @@ export default function Universities() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground">Short Name</Label>
-                  <p className="font-medium">{selectedUniversity.shortName}</p>
+                  <p className="font-medium">{selectedUniversity.short_name || selectedUniversity.shortName}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Email Domain</Label>
-                  <p className="font-mono">@{selectedUniversity.emailDomain}</p>
+                  <p className="font-mono">@{selectedUniversity.email_domain || selectedUniversity.emailDomain}</p>
                 </div>
               </div>
 
@@ -223,14 +253,14 @@ export default function Universities() {
                   <Mail className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <Label className="text-muted-foreground">Contact Email</Label>
-                    <p className="font-medium text-sm">{selectedUniversity.contactEmail}</p>
+                    <p className="font-medium text-sm">{selectedUniversity.contact_email || selectedUniversity.contactEmail}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   <Phone className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <Label className="text-muted-foreground">Phone</Label>
-                    <p className="font-medium text-sm">{selectedUniversity.contactPhone}</p>
+                    <p className="font-medium text-sm">{selectedUniversity.contact_phone || selectedUniversity.contactPhone}</p>
                   </div>
                 </div>
               </div>
@@ -238,7 +268,7 @@ export default function Universities() {
               <div>
                 <Label className="text-muted-foreground">Campuses</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedUniversity.campuses.map((campus) => (
+                  {selectedUniversity.campuses?.map((campus) => (
                     <span
                       key={campus}
                       className="px-3 py-1 rounded-full bg-secondary/10 text-secondary text-sm font-medium"
@@ -252,12 +282,12 @@ export default function Universities() {
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
                   <Label className="text-muted-foreground">Total Items</Label>
-                  <p className="text-2xl font-bold">{selectedUniversity.totalItems}</p>
+                  <p className="text-2xl font-bold">{selectedUniversity.total_items || selectedUniversity.totalItems || 0}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Active Items</Label>
                   <p className="text-2xl font-bold text-secondary">
-                    {selectedUniversity.activeItems}
+                    {selectedUniversity.active_items || selectedUniversity.activeItems || 0}
                   </p>
                 </div>
               </div>

@@ -7,13 +7,25 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<ItemStatus, { label: string; className: string }> = {
+  open: {
+    label: 'Open',
+    className: 'bg-warning/10 text-warning border-warning/20',
+  },
   pending: {
     label: 'Pending',
     className: 'bg-warning/10 text-warning border-warning/20',
   },
+  potential_match: {
+    label: 'Potential Match',
+    className: 'bg-info/10 text-info border-info/20',
+  },
   matched: {
     label: 'Matched',
     className: 'bg-info/10 text-info border-info/20',
+  },
+  claimed: {
+    label: 'Claimed',
+    className: 'bg-secondary/10 text-secondary border-secondary/20',
   },
   verified: {
     label: 'Verified',
@@ -30,7 +42,10 @@ const statusConfig: Record<ItemStatus, { label: string; className: string }> = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || {
+    label: status || 'Unknown',
+    className: 'bg-muted text-muted-foreground border-muted-foreground/20',
+  };
 
   return (
     <span

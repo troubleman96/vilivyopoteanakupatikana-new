@@ -40,78 +40,86 @@ export function ItemsTable({ items, onViewDetails, onMatch, showUniversity = fal
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
-            <TableRow key={item.id} className="hover:bg-muted/30 transition-colors">
-              <TableCell>
-                <div className="flex flex-col">
-                  <span className="font-medium text-foreground">{item.title}</span>
-                  <span className="text-sm text-muted-foreground truncate max-w-[200px]">
-                    {item.description}
+          {items.map((item) => {
+            if (!item) return null;
+            return (
+              <TableRow key={item.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">{item.title}</span>
+                    <span className="text-sm text-muted-foreground truncate max-w-[200px]">
+                      {item.description}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs font-medium">
+                    {item.category}
                   </span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs font-medium">
-                  {item.category}
-                </span>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{item.location}</TableCell>
-              {showUniversity && (
-                <TableCell className="text-muted-foreground">{item.universityName}</TableCell>
-              )}
-              <TableCell className="text-muted-foreground">
-                {new Date(item.dateReported).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </TableCell>
-              <TableCell>
-                <StatusBadge status={item.status} />
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onViewDetails(item)}
-                    className="h-8 w-8"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  {onMatch && item.status === 'pending' && (
+                </TableCell>
+                <TableCell className="text-muted-foreground">{item.location || item.location_display || 'No location'}</TableCell>
+                {showUniversity && (
+                  <TableCell className="text-muted-foreground">{item.university_name || item.universityName || 'Unknown'}</TableCell>
+                )}
+                <TableCell className="text-muted-foreground">
+                  {(() => {
+                    const dateStr = item.date_reported || item.dateReported;
+                    if (!dateStr) return 'No date';
+                    const date = new Date(dateStr);
+                    return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    });
+                  })()}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={item.status} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => onMatch(item)}
-                      className="h-8 w-8 text-secondary hover:text-secondary"
+                      onClick={() => onViewDetails(item)}
+                      className="h-8 w-8"
                     >
-                      <Link2 className="h-4 w-4" />
+                      <Eye className="h-4 w-4" />
                     </Button>
-                  )}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
+                    {onMatch && item.status === 'pending' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onMatch(item)}
+                        className="h-8 w-8 text-secondary hover:text-secondary"
+                      >
+                        <Link2 className="h-4 w-4" />
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onViewDetails(item)}>
-                        View Details
-                      </DropdownMenuItem>
-                      {item.status === 'pending' && onMatch && (
-                        <DropdownMenuItem onClick={() => onMatch(item)}>
-                          Find Match
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onViewDetails(item)}>
+                          View Details
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem>Contact Reporter</DropdownMenuItem>
-                      <DropdownMenuItem>Add Note</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+                        {item.status === 'pending' && onMatch && (
+                          <DropdownMenuItem onClick={() => onMatch(item)}>
+                            Find Match
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem>Contact Reporter</DropdownMenuItem>
+                        <DropdownMenuItem>Add Note</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

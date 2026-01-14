@@ -12,6 +12,7 @@ interface StatCardProps {
   };
   variant?: 'default' | 'primary' | 'secondary' | 'warning' | 'success';
   className?: string;
+  isLoading?: boolean;
 }
 
 const variantStyles = {
@@ -30,6 +31,7 @@ export function StatCard({
   trend,
   variant = 'default',
   className,
+  isLoading,
 }: StatCardProps) {
   const isColored = variant !== 'default';
 
@@ -42,16 +44,20 @@ export function StatCard({
       )}
     >
       <div className="flex items-start justify-between">
-        <div className="space-y-2">
+        <div className="space-y-2 w-full">
           <p className={cn(
             'text-sm font-medium',
             isColored ? 'text-current opacity-80' : 'text-muted-foreground'
           )}>
             {title}
           </p>
-          <p className="text-3xl font-bold font-display tracking-tight">
-            {value}
-          </p>
+          {isLoading ? (
+            <div className="h-9 w-16 bg-muted animate-pulse rounded" />
+          ) : (
+            <p className="text-3xl font-bold font-display tracking-tight">
+              {value}
+            </p>
+          )}
           {description && (
             <p className={cn(
               'text-sm',
@@ -70,7 +76,7 @@ export function StatCard({
           )}
         </div>
         <div className={cn(
-          'p-3 rounded-xl',
+          'p-3 rounded-xl flex-shrink-0',
           isColored ? 'bg-white/20' : 'bg-primary/10'
         )}>
           <Icon className={cn(

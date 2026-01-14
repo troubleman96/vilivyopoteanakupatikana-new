@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { users, universities } from '@/data/mockData';
 import { User, UserRole } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,8 @@ import {
   Edit,
   Trash2,
   Mail,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Table,
@@ -36,6 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 
 const roleLabels: Record<UserRole, { label: string; className: string }> = {
   super_admin: {
@@ -57,25 +60,19 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
-  // Filter users based on current user's role
-  const baseUsers =
-    currentUser?.role === 'super_admin'
-      ? users
-      : users.filter((u) => u.universityId === currentUser?.universityId);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['users', roleFilter, searchQuery],
+    queryFn: async () => {
+      const params: any = {};
+      if (roleFilter !== 'all') params.role = roleFilter;
+      if (searchQuery) params.search = searchQuery;
 
-  const filteredUsers = baseUsers.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    return matchesSearch && matchesRole;
+      const response = await api.get('/management/users/', { params });
+      return response.data.data?.results || [];
+    },
   });
 
-  const getUniversityName = (universityId?: string) => {
-    if (!universityId) return 'System';
-    const uni = universities.find((u) => u.id === universityId);
-    return uni?.shortName || 'Unknown';
-  };
+  const usersList = data || [];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -128,121 +125,134 @@ export default function UsersPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-lg bg-card border border-border/50">
           <p className="text-sm text-muted-foreground">Total Users</p>
-          <p className="text-2xl font-bold font-display">{baseUsers.length}</p>
+          <p className="text-2xl font-bold font-display">{isLoading ? '...' : usersList.length}</p>
         </div>
         {currentUser?.role === 'super_admin' && (
           <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
             <p className="text-sm text-primary">Super Admins</p>
             <p className="text-2xl font-bold font-display text-primary">
-              {baseUsers.filter((u) => u.role === 'super_admin').length}
+              {isLoading ? '...' : usersList.filter((u: any) => u.role === 'super_admin').length}
             </p>
           </div>
         )}
         <div className="p-4 rounded-lg bg-secondary/10 border border-secondary/20">
           <p className="text-sm text-secondary">Uni Admins</p>
           <p className="text-2xl font-bold font-display text-secondary">
-            {baseUsers.filter((u) => u.role === 'university_admin').length}
+            {isLoading ? '...' : usersList.filter((u: any) => u.role === 'university_admin').length}
           </p>
         </div>
         <div className="p-4 rounded-lg bg-info/10 border border-info/20">
           <p className="text-sm text-info">Security Officers</p>
           <p className="text-2xl font-bold font-display text-info">
-            {baseUsers.filter((u) => u.role === 'security_officer').length}
+            {isLoading ? '...' : usersList.filter((u: any) => u.role === 'security_officer').length}
           </p>
         </div>
       </div>
 
       {/* Table */}
       <div className="table-container">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold">User</TableHead>
-              <TableHead className="font-semibold">Role</TableHead>
-              {currentUser?.role === 'super_admin' && (
-                <TableHead className="font-semibold">University</TableHead>
-              )}
-              <TableHead className="font-semibold">Last Login</TableHead>
-              <TableHead className="font-semibold text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUsers.map((user) => {
-              const roleConfig = roleLabels[user.role];
-              return (
-                <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                        <span className="text-sm font-semibold text-primary">
-                          {user.name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-muted-foreground">{user.email}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleConfig.className}`}
-                    >
-                      <Shield className="h-3 w-3" />
-                      {roleConfig.label}
-                    </span>
-                  </TableCell>
-                  {currentUser?.role === 'super_admin' && (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Loading users...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-destructive">Error loading users</h3>
+            <p className="text-muted-foreground">Please try again later</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">User</TableHead>
+                <TableHead className="font-semibold">Role</TableHead>
+                {currentUser?.role === 'super_admin' && (
+                  <TableHead className="font-semibold">University</TableHead>
+                )}
+                <TableHead className="font-semibold">Last Login</TableHead>
+                <TableHead className="font-semibold text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {usersList.map((user: User) => {
+                const roleConfig = roleLabels[user.role];
+                return (
+                  <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span>{getUniversityName(user.universityId)}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                          <span className="text-sm font-semibold text-primary">
+                            {(user.name || user.username)
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{user.name || user.username}</p>
+                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
                       </div>
                     </TableCell>
-                  )}
-                  <TableCell className="text-muted-foreground">
-                    {user.lastLogin
-                      ? new Date(user.lastLogin).toLocaleDateString('en-GB', {
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleConfig?.className || 'bg-muted text-muted-foreground'}`}
+                      >
+                        <Shield className="h-3 w-3" />
+                        {roleConfig?.label || user.role}
+                      </span>
+                    </TableCell>
+                    {currentUser?.role === 'super_admin' && (
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span>{user.university_name || 'System'}</span>
+                        </div>
+                      </TableCell>
+                    )}
+                    <TableCell className="text-muted-foreground">
+                      {user.lastLogin
+                        ? new Date(user.lastLogin).toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
                         })
-                      : 'Never'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit User
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Mail className="h-4 w-4 mr-2" />
-                          Send Email
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Deactivate
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                        : 'Never'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit User
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Email
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Deactivate
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
-      {filteredUsers.length === 0 && (
+      {!isLoading && usersList.length === 0 && (
         <div className="text-center py-12">
           <UsersIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold">No users found</h3>
