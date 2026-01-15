@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { LostFoundItem } from '@/types';
 import { ItemsTable } from '@/components/items/ItemsTable';
 import { ItemDetailsDialog } from '@/components/items/ItemDetailsDialog';
@@ -18,6 +19,7 @@ import api from '@/lib/api';
 
 export default function FoundItems() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [selectedItem, setSelectedItem] = useState<LostFoundItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +67,7 @@ export default function FoundItems() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => navigate('/found-items/new')}>
             <Plus className="h-4 w-4" />
             Add Found Item
           </Button>

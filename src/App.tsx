@@ -17,6 +17,7 @@ import UsersPage from "./pages/Users";
 import AuditLogs from "./pages/AuditLogs";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import ReportFoundItem from "./pages/ReportFoundItem";
 
 const queryClient = new QueryClient();
 
@@ -30,12 +31,13 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
+
             {/* Protected Routes */}
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/lost-items" element={<LostItems />} />
               <Route path="/found-items" element={<FoundItems />} />
+              <Route path="/found-items/new" element={<ReportFoundItem />} />
               <Route path="/verifications" element={<Verifications />} />
               <Route path="/universities" element={<Universities />} />
               <Route path="/users" element={<UsersPage />} />
