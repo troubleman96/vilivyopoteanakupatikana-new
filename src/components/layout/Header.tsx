@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
+import { NotificationsPanel } from './NotificationsPanel';
 import { useState } from 'react';
 
 export function Header() {
@@ -57,12 +58,17 @@ export function Header() {
           </Button>
         </div>
 
-        <Button variant="ghost" size="icon" className="relative hover:bg-primary/5 hover:text-primary transition-colors">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground ring-2 ring-background">
-            3
-          </span>
-        </Button>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative hover:bg-primary/5 hover:text-primary transition-colors">
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground ring-2 ring-background">
+                4
+              </span>
+            </Button>
+          </SheetTrigger>
+          <NotificationsPanel />
+        </Sheet>
       </div>
     </header>
   );
