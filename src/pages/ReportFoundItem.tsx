@@ -188,28 +188,6 @@ export default function ReportFoundItem() {
                                     </Select>
                                 </div>
                             </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="description">Description *</Label>
-                                <Textarea
-                                    id="description"
-                                    placeholder="Describe the item (color, brand, distinguishing marks)..."
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    className="min-h-[100px]"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="date">Date Found *</Label>
-                                <Input
-                                    type="date"
-                                    id="date"
-                                    value={formData.date_found}
-                                    onChange={(e) => setFormData({ ...formData, date_found: e.target.value })}
-                                    max={new Date().toISOString().split("T")[0]}
-                                />
-                            </div>
                         </div>
 
                         {/* Location Section */}
@@ -248,6 +226,31 @@ export default function ReportFoundItem() {
                                         onChange={(e) => setFormData({ ...formData, specific_location: e.target.value })}
                                     />
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Description & Date Section */}
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="description">Description *</Label>
+                                <Textarea
+                                    id="description"
+                                    placeholder="Describe the item (color, brand, distinguishing marks)..."
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    className="min-h-[100px]"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="date">Date Found *</Label>
+                                <Input
+                                    type="date"
+                                    id="date"
+                                    value={formData.date_found}
+                                    onChange={(e) => setFormData({ ...formData, date_found: e.target.value })}
+                                    max={new Date().toISOString().split("T")[0]}
+                                />
                             </div>
                         </div>
 
