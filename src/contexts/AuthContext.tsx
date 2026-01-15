@@ -92,12 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('AuthContext: login called for:', email);
-      const response = await api.post('/auth/login/', {
+      console.log('AuthContext: admin-login called for:', email);
+      const response = await api.post('/auth/admin-login/', {
         email: email.toLowerCase().trim(),
         password,
       });
-      console.log('AuthContext: Login API response:', response.data);
+      console.log('AuthContext: AdminLogin API response:', response.data);
 
       if (response.data.success && response.data.data) {
         const { access, refresh } = response.data.data;
@@ -106,19 +106,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('AuthContext: Tokens saved to localStorage');
 
         // Fetch profile to get user details
-        console.log('AuthContext: Fetching profile after successful login...');
+        console.log('AuthContext: Fetching profile after successful admin login...');
         const profileResponse = await api.get('/auth/profile/');
-        console.log('AuthContext: Post-login profile response:', profileResponse.data);
+        console.log('AuthContext: Post-admin-login profile response:', profileResponse.data);
         if (profileResponse.data.success && profileResponse.data.data) {
           setUser(profileResponse.data.data);
-          console.log('AuthContext: User state updated, login success');
+          console.log('AuthContext: User state updated, admin login success');
           return { success: true };
         }
       }
-      console.warn('AuthContext: Login failed - success flag false or data missing');
-      return { success: false, error: response.data.message || 'Login failed' };
+      console.warn('AuthContext: Admin login failed - success flag false or data missing');
+      return { success: false, error: response.data.message || 'Admin login failed' };
     } catch (error: any) {
-      console.error('AuthContext: Login exception:', error);
+      console.error('AuthContext: Admin login exception:', error);
       return {
         success: false,
         error: error.response?.data?.message || 'Invalid email or password'
