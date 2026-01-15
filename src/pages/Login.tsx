@@ -100,7 +100,7 @@ export default function Login() {
               />
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">
-              TZ UniFind
+              VPK
             </h1>
             <p className="mt-2 text-muted-foreground">
               University Lost & Found Control System
@@ -172,16 +172,7 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">Demo Credentials:</p>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p><span className="font-medium">Super Admin:</span> superadmin@system.ac.tz</p>
-              <p><span className="font-medium">Uni Admin:</span> admin@udsm.ac.tz</p>
-              <p><span className="font-medium">Security:</span> security@udsm.ac.tz</p>
-              <p className="text-xs">Password: <span className="font-mono">admin123</span> or <span className="font-mono">password123</span></p>
-            </div>
-          </div>
+
 
           {/* Footer */}
           <p className="text-center text-sm text-muted-foreground">

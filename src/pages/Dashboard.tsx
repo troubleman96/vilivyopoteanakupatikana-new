@@ -111,7 +111,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           title="Lost Items"
           value={stats.total_lost_items ?? 0}
@@ -147,15 +147,6 @@ export default function Dashboard() {
           variant="success"
           isLoading={statsLoading}
         />
-        {user?.role === 'super_admin' && (
-          <StatCard
-            title="Universities"
-            value={unis.length}
-            icon={Building2}
-            variant="secondary"
-            isLoading={uniLoading}
-          />
-        )}
       </div>
 
       {/* Content Grid */}

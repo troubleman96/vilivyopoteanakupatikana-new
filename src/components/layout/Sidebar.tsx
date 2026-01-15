@@ -82,7 +82,7 @@ export function Sidebar({ className, onLinkClick }: SidebarProps) {
           />
         </div>
         <div className="flex flex-col">
-          <span className="font-display font-bold text-sm">TZ UniFind</span>
+          <span className="font-display font-bold text-sm">VPK</span>
           <span className="text-xs text-sidebar-foreground/60">Control Panel</span>
         </div>
       </div>
