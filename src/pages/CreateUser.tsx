@@ -57,7 +57,7 @@ export default function CreateUser() {
                 role: formData.role,
             };
 
-            console.log("Creating user:", payload);
+
             await api.post("/management/users/", payload);
 
             toast.success("User created successfully!");
@@ -65,7 +65,7 @@ export default function CreateUser() {
                 navigate("/users");
             }, 1500);
         } catch (error: any) {
-            console.error("Create user error:", error);
+
             const errorMsg =
                 error.response?.data?.detail ||
                 error.response?.data?.message ||

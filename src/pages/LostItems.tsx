@@ -46,7 +46,7 @@ export default function LostItems() {
   };
 
   const handleMatch = (item: LostFoundItem) => {
-    console.log('Match item:', item);
+
   };
 
   return (

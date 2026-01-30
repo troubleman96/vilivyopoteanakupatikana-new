@@ -30,9 +30,9 @@ export default function Login() {
         if (domain && domain.includes('.') && domain.length > 3) {
           const validation = validateEmail(email);
           if (validation.valid) {
-            console.log('Login: Calling checkDomain for email:', email);
+
             const check = await checkDomain(email);
-            console.log('Login: checkDomain result:', check);
+
             if (!check.registered) {
               setEmailError(`The domain "${domain}" is not registered. Please contact the Super Admin to register your university.`);
             } else {
@@ -70,15 +70,15 @@ export default function Login() {
 
     setIsLoading(true);
 
-    console.log('Login: Attempting login for:', email);
+
     const result = await login(email, password);
-    console.log('Login: Login result:', result);
+
 
     if (result.success) {
-      console.log('Login: Success, navigating to dashboard');
+
       navigate('/dashboard');
     } else {
-      console.error('Login: Failed:', result.error);
+
       setError(result.error || 'Login failed');
     }
 

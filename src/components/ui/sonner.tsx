@@ -9,7 +9,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     const themeContext = useTheme();
     theme = themeContext.theme || "system";
   } catch (e) {
-    console.warn("Sonner: ThemeProvider not found, falling back to system theme");
+
   }
 
   return (

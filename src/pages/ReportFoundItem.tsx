@@ -109,7 +109,7 @@ export default function ReportFoundItem() {
                 university: user?.university || user?.universityId,
             };
 
-            console.log("Submitting Found Item:", reportData);
+
 
             await api.post('/items/report-found/', reportData);
 
@@ -119,7 +119,7 @@ export default function ReportFoundItem() {
             }, 1500);
 
         } catch (error: any) {
-            console.error("Submission error:", error);
+
             const errorMsg = error.response?.data?.detail || error.response?.data?.message || "Failed to submit report";
             toast.error(errorMsg);
         } finally {
