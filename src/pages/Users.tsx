@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, UserRole } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ const roleLabels: Record<UserRole, { label: string; className: string }> = {
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
@@ -89,7 +91,7 @@ export default function UsersPage() {
               : 'Manage your university staff accounts'}
           </p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => navigate('/users/new')}>
           <Plus className="h-4 w-4" />
           Add User
         </Button>

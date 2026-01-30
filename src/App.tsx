@@ -18,6 +18,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ReportFoundItem from "./pages/ReportFoundItem";
+import CreateUser from "./pages/CreateUser";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/verifications" element={<Verifications />} />
               <Route path="/universities" element={<Universities />} />
               <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/new" element={<CreateUser />} />
               <Route path="/audit-logs" element={<AuditLogs />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
