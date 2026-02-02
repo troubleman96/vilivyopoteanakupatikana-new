@@ -88,24 +88,28 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+      <div className="flex-1 flex justify-center p-6 bg-background items-start pt-12 sm:items-center sm:pt-0">
+
         <div className="w-full max-w-md space-y-8 animate-fade-in">
-          {/* Logo */}
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
+          {/* Logo & Branding */}
+          <div className="text-center space-y-2">
+            <div className="flex justify-center mb-2">
               <img
                 src="/vilivyopoteanakupatikana_favicon/web-app-manifest-192x192.png"
                 alt="TZ UniFind Logo"
                 className="h-20 w-20 object-contain"
               />
             </div>
-            <h1 className="text-3xl font-display font-bold text-foreground">
-              VPK
-            </h1>
-            <p className="mt-2 text-muted-foreground">
-              University Lost & Found Control System
-            </p>
+            <div className="space-y-1">
+              <h1 className="text-3xl font-display font-bold text-foreground">
+                VPK
+              </h1>
+              <p className="text-muted-foreground">
+                University Lost & Found Control System
+              </p>
+            </div>
           </div>
+
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -145,13 +149,15 @@ export default function Login() {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
                     id="password"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
                     required
                   />
+
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
