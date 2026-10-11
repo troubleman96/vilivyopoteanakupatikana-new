@@ -40,11 +40,11 @@ Database-backed fixed-window throttles cover registration, sign-in (by client ad
 - `GET /api/v1/items?q=...`, `/api/v1/items/search?q=...`, `/api/v1/items/{itemID}`: approved, public-safe projections only.
 - `POST /api/v1/reports`: authenticated private report, held pending human review.
 - `GET /api/v1/me/reports`; `POST /api/v1/me/claims`; `GET /api/v1/me/claims`.
-- `GET /api/v1/staff/institutions/{institutionID}/cases`, `GET .../claims`, `PATCH .../cases/{caseID}`, `POST .../claims/{claimID}/review`, `POST .../items/{itemID}/review`, `POST .../cases/{caseID}/handover`.
+- `GET /api/v1/staff/institutions/{institutionID}/cases`, `GET .../claims`, `PATCH .../cases/{caseID}`, `POST .../claims/{claimID}/review`, `POST .../claims/{claimID}/verification`, `POST .../items/{itemID}/review`, `POST .../cases/{caseID}/handover`.
 - `GET /api/v1/institutions/{institutionID}/stats`, `GET /api/v1/platform/stats`.
 - `POST /api/v1/staff/institutions/{institutionID}/matches/suggest`.
 
-Every private route verifies a revocable PostgreSQL session from the HttpOnly cookie (the server retains bearer parsing for non-browser API clients). Staff/admin scope comes exclusively from active database membership; platform aggregates require explicit active platform-admin membership. Private user records are filtered by authenticated user ID. Staff queries and mutations scope records to the authorized institution. A case cannot be marked returned through the ordinary status endpoint: staff must first mark it matched, approve a claim for that case, then record a one-time handover linked to both the approved claim and the staff account. Errors use `{"error":{"code":"...","message":"..."}}`; private claims, contacts, evidence references, staff notes, and handover details never appear in public item DTOs.
+Every private route verifies a revocable PostgreSQL session from the HttpOnly cookie (the server retains bearer parsing for non-browser API clients). Staff/admin scope comes exclusively from an active staff or institution-admin membership checked on each institution-scoped endpoint; platform aggregates require explicit active platform-admin membership. Private user records are filtered by authenticated user ID. Staff queries and mutations scope records to the authorized institution. A case cannot be marked returned through the ordinary status endpoint: staff must first mark it matched, approve a claim for that case, record a separate verification tied to that exact claim approval, then record a one-time handover linked to the verified claim and staff account. Database row-security policies and triggers also reject handovers or returned statuses that do not have this current verification record. Claims can only be created against found-item listings. Errors use `{"error":{"code":"...","message":"..."}}`; private claims, contacts, evidence references, staff notes, and handover details never appear in public item DTOs.
 
 The Python matching service receives only reviewed public-safe summaries. AI matching remains disabled by default and never decides ownership or approves claims. CORS is restricted to `CORS_ALLOWED_ORIGINS` (default `http://localhost:3000`).
 
@@ -55,16 +55,16 @@ cd services/api
 go test ./... # Unit/API tests; skips the PostgreSQL integration suite unless opted in
 ```
 
-The opt-in integration suite creates **50 synthetic accounts** and synthetic institutions/items inside its dedicated local `_test` database. In addition to identity/session and handover tests, it verifies institution-level API isolation, row-security filtering, rejected cross-tenant writes, tenant-consistent foreign keys, and that the public database view contains no private columns. Supply an owner connection for fixture setup/cleanup and a separate non-owner app connection for API and RLS operations:
+The opt-in integration suite creates **50 synthetic accounts** and synthetic institutions/items inside its dedicated local `_test` database. In addition to identity/session and verified handover tests, it verifies role and institution authorization on every staff endpoint, rejects claims against missing listings, exercises direct database return/handover bypass attempts, checks row-security filtering and tenant-consistent foreign keys, and confirms that the public database view contains no private columns. Supply an owner connection for fixture setup/cleanup and a separate non-owner app connection for API and RLS operations:
 
 ```sh
-createdb vilivyopotea_phase2_test
-export TEST_DATABASE_URL='postgres://<local-db-owner>:<owner-password>@127.0.0.1:5432/vilivyopotea_phase2_test?sslmode=disable'
+createdb vilivyopotea_phase3_test
+export TEST_DATABASE_URL='postgres://<local-db-owner>:<owner-password>@127.0.0.1:5432/vilivyopotea_phase3_test?sslmode=disable'
 export APP_DATABASE_USER='vilivyopotea_app'
 export APP_DATABASE_PASSWORD='<strong-url-safe-secret>'
 export DATABASE_URL="$TEST_DATABASE_URL"
 go run ./cmd/migrate
-export TEST_APP_DATABASE_URL='postgres://vilivyopotea_app:<strong-url-safe-secret>@127.0.0.1:5432/vilivyopotea_phase2_test?sslmode=disable'
+export TEST_APP_DATABASE_URL='postgres://vilivyopotea_app:<strong-url-safe-secret>@127.0.0.1:5432/vilivyopotea_phase3_test?sslmode=disable'
 TEST_DATABASE_URL="$TEST_DATABASE_URL" TEST_APP_DATABASE_URL="$TEST_APP_DATABASE_URL" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIdentityHardening$' -count=1 -v
 ```
 

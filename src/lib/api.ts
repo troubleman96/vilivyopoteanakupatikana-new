@@ -78,6 +78,8 @@ export type StaffClaim = {
   evidence_reference?: string | null;
   status: string;
   created_at: string;
+  verification_method?: string;
+  verified_at?: string;
 };
 
 export type MatchSuggestion = {
@@ -353,6 +355,21 @@ export async function reviewStaffClaim(
   return requestData(
     `/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/review`,
     { method: 'POST', body: { status, staff_note: staffNote } }
+  );
+}
+
+export async function recordStaffClaimVerification(
+  institutionId: string,
+  claimId: string,
+  verificationMethod: 'in_person' | 'video_call' | 'document_review' | 'other',
+  verificationNote: string
+): Promise<{ status: string; verified_at: string }> {
+  return requestData(
+    `/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/verification`,
+    {
+      method: 'POST',
+      body: { verification_method: verificationMethod, verification_note: verificationNote }
+    }
   );
 }
 

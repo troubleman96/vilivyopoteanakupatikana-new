@@ -60,7 +60,7 @@ func TestPrivateAuthFailClosed(t *testing.T) {
 	for _, test := range []struct {
 		path   string
 		method string
-	}{{"/api/v1/reports", http.MethodPost}, {"/api/v1/me/reports", http.MethodGet}} {
+	}{{"/api/v1/reports", http.MethodPost}, {"/api/v1/me/reports", http.MethodGet}, {"/api/v1/staff/institutions/synthetic/claims/synthetic/verification", http.MethodPost}} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(test.method, test.path, strings.NewReader(`{"institution_id":"synthetic-only","kind":"found","title":"x"}`))
 		server.ServeHTTP(recorder, request)

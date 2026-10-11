@@ -126,7 +126,7 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 
 	accounts := make([]integrationAccount, 50)
 	var userIDs []string
-	var handoverItemID, handoverCaseID string
+	var handoverItemID, handoverCaseID, lostItemID string
 	testItemIDs := []string{publicItemID, otherItemID}
 	testCaseIDs := []string{publicCaseID, otherCaseID}
 	defer func() {
@@ -370,6 +370,53 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 			t.Errorf("tenant boundary %q: status %d want %d response %s", test.name, status, test.want, body)
 		}
 	}
+	type staffScope struct {
+		name          string
+		user          int
+		institutionID string
+		itemID        string
+		caseID        string
+		claimID       string
+	}
+	staffRoutes := []struct {
+		name   string
+		method string
+		path   func(staffScope) string
+		body   any
+	}{
+		{"case queue", http.MethodGet, func(scope staffScope) string { return "/api/v1/staff/institutions/" + scope.institutionID + "/cases" }, nil},
+		{"claim queue", http.MethodGet, func(scope staffScope) string { return "/api/v1/staff/institutions/" + scope.institutionID + "/claims" }, nil},
+		{"case update", http.MethodPatch, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/cases/" + scope.caseID
+		}, map[string]string{"status": "matched"}},
+		{"claim review", http.MethodPost, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/claims/" + scope.claimID + "/review"
+		}, map[string]string{"status": "approved"}},
+		{"claim verification", http.MethodPost, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/claims/" + scope.claimID + "/verification"
+		}, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic verification attempt."}},
+		{"item review", http.MethodPost, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/items/" + scope.itemID + "/review"
+		}, map[string]string{"status": "rejected"}},
+		{"handover", http.MethodPost, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/cases/" + scope.caseID + "/handover"
+		}, map[string]string{"claim_id": "synthetic", "handover_at": time.Now().UTC().Format(time.RFC3339)}},
+		{"match suggestions", http.MethodPost, func(scope staffScope) string {
+			return "/api/v1/staff/institutions/" + scope.institutionID + "/matches/suggest"
+		}, map[string]string{"item_id": "synthetic"}},
+		{"institution stats", http.MethodGet, func(scope staffScope) string { return "/api/v1/institutions/" + scope.institutionID + "/stats" }, nil},
+	}
+	for _, scope := range []staffScope{
+		{name: "non-member", user: 1, institutionID: institutionID, itemID: publicItemID, caseID: publicCaseID, claimID: accounts[1].claimID},
+		{name: "cross-institution member", user: 0, institutionID: otherInstitutionID, itemID: otherItemID, caseID: otherCaseID, claimID: accounts[1].claimID},
+	} {
+		for _, route := range staffRoutes {
+			status, body := integrationRequest(t, accounts[scope.user].client, route.method, server.URL+route.path(scope), "cookie:"+accounts[scope.user].cookie, route.body)
+			if status != http.StatusForbidden {
+				t.Errorf("%s bypassed role/institution checks on %s: status %d response %s", scope.name, route.name, status, body)
+			}
+		}
+	}
 	status, body := integrationRequest(t, accounts[0].client, http.MethodGet, server.URL+"/api/v1/staff/institutions/"+institutionID+"/cases", "cookie:"+accounts[0].cookie, nil)
 	if status != http.StatusOK || strings.Contains(string(body), otherCaseID) {
 		t.Fatalf("institution A staff queue exposed an institution B case: status %d response %s", status, body)
@@ -438,6 +485,14 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 	}
 	testItemIDs = append(testItemIDs, handoverItemID)
 	testCaseIDs = append(testCaseIDs, handoverCaseID)
+	if err := pool.QueryRow(ctx, `INSERT INTO items(institution_id,reporter_id,kind,category,private_title,private_description,public_title,public_description,review_status,visibility) VALUES($1,$2,'lost','test','Synthetic lost item','Synthetic private fixture','Synthetic missing listing','Public-safe missing fixture','approved','public') RETURNING id::text`, institutionID, accounts[0].user.ID).Scan(&lostItemID); err != nil {
+		t.Fatal(err)
+	}
+	testItemIDs = append(testItemIDs, lostItemID)
+	status, body = integrationRequest(t, accounts[1].client, http.MethodPost, server.URL+"/api/v1/me/claims", "cookie:"+accounts[1].cookie, map[string]string{"item_id": lostItemID, "statement": "Synthetic attempt against missing item."})
+	if status != http.StatusBadRequest {
+		t.Fatalf("claim against a listing marked Missing should be rejected: status %d response %s", status, body)
+	}
 	status, body = integrationRequest(t, accounts[1].client, http.MethodPost, server.URL+"/api/v1/me/claims", "cookie:"+accounts[1].cookie, map[string]string{"item_id": handoverItemID, "statement": "Synthetic proof for controlled handover."})
 	var claim struct {
 		Data integrationRow `json:"data"`
@@ -456,6 +511,11 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 	}
 	handoverURL := caseURL + "/handover"
 	handoverPayload := map[string]string{"claim_id": claim.Data.ID, "handover_at": time.Now().UTC().Format(time.RFC3339), "details": "Synthetic verified handover.", "recipient": "Synthetic account 02"}
+	verificationURL := server.URL + "/api/v1/staff/institutions/" + institutionID + "/claims/" + claim.Data.ID + "/verification"
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, verificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic pre-approval attempt."})
+	if status != http.StatusConflict {
+		t.Fatalf("verification must not be recorded before claim approval: status %d response %s", status, body)
+	}
 	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
 	if status != http.StatusConflict {
 		t.Fatalf("handover without an approved claim should be blocked: status %d response %s", status, body)
@@ -465,8 +525,96 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 		t.Fatalf("approve synthetic claim: status %d response %s", status, body)
 	}
 	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
+	if status != http.StatusConflict {
+		t.Fatalf("approved but unverified claim should not permit handover: status %d response %s", status, body)
+	}
+	status, body = integrationRequest(t, accounts[1].client, http.MethodPost, verificationURL, "cookie:"+accounts[1].cookie, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic unauthorized verification."})
+	if status != http.StatusForbidden {
+		t.Fatalf("claimant without institution staff role recorded verification: status %d response %s", status, body)
+	}
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, verificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "unknown", "verification_note": "short"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("invalid verification details should be rejected: status %d response %s", status, body)
+	}
+
+	assertRuntimeWriteRejected := func(description, statement string, args ...any) {
+		t.Helper()
+		tx, err := appPool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.user_id',$1,true),set_config('app.institution_id',$2,true)`, accounts[0].user.ID, institutionID); err != nil {
+			_ = tx.Rollback(ctx)
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, statement, args...); err == nil {
+			_ = tx.Rollback(ctx)
+			t.Fatalf("database accepted direct bypass attempt: %s", description)
+		}
+		_ = tx.Rollback(ctx)
+	}
+	assertRuntimeWriteRejected("direct case return without a verified handover", `UPDATE cases SET status='returned' WHERE id=$1`, handoverCaseID)
+	assertRuntimeWriteRejected("direct item return without a verified handover", `UPDATE items SET status='returned' WHERE id=$1`, handoverItemID)
+	assertRuntimeWriteRejected("direct handover insert without a verification record", `INSERT INTO handovers(case_id,institution_id,claim_id,recorded_by,handover_at) VALUES($1,$2,$3,$4,now())`, handoverCaseID, institutionID, claim.Data.ID, accounts[0].user.ID)
+	assertRuntimeWriteRejected("direct claim insert against a missing listing", `INSERT INTO claims(item_id,claimant_id,statement) VALUES($1,$2,'Synthetic direct claim attempt')`, lostItemID, accounts[0].user.ID)
+
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, verificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic private check completed."})
 	if status != http.StatusCreated {
-		t.Fatalf("handover after approval should succeed: status %d response %s", status, body)
+		t.Fatalf("record synthetic claim verification: status %d response %s", status, body)
+	}
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, verificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic duplicate check."})
+	if status != http.StatusConflict {
+		t.Fatalf("duplicate verification for the same approval should be blocked: status %d response %s", status, body)
+	}
+	wrongItemClaimID := accounts[2].claimID
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, server.URL+"/api/v1/staff/institutions/"+institutionID+"/claims/"+wrongItemClaimID+"/review", "cookie:"+accounts[0].cookie, map[string]string{"status": "approved", "staff_note": "Synthetic wrong-item claim review."})
+	if status != http.StatusOK {
+		t.Fatalf("approve synthetic claim for another item: status %d response %s", status, body)
+	}
+	wrongItemVerificationURL := server.URL + "/api/v1/staff/institutions/" + institutionID + "/claims/" + wrongItemClaimID + "/verification"
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, wrongItemVerificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "in_person", "verification_note": "Synthetic wrong-item verification."})
+	if status != http.StatusCreated {
+		t.Fatalf("record synthetic verification for another item: status %d response %s", status, body)
+	}
+	handoverPayload["claim_id"] = wrongItemClaimID
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
+	if status != http.StatusConflict {
+		t.Fatalf("verified claim for another item should not permit handover: status %d response %s", status, body)
+	}
+	handoverPayload["claim_id"] = claim.Data.ID
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, server.URL+"/api/v1/staff/institutions/"+institutionID+"/claims/"+claim.Data.ID+"/review", "cookie:"+accounts[0].cookie, map[string]string{"status": "approved", "staff_note": "Synthetic re-review."})
+	if status != http.StatusOK {
+		t.Fatalf("re-review synthetic claim: status %d response %s", status, body)
+	}
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
+	if status != http.StatusConflict {
+		t.Fatalf("verification from a prior claim approval should not authorize handover after re-review: status %d response %s", status, body)
+	}
+	assertRuntimeWriteRejected("direct handover insert using a verification from an earlier approval", `INSERT INTO handovers(case_id,institution_id,claim_id,recorded_by,handover_at) VALUES($1,$2,$3,$4,now())`, handoverCaseID, institutionID, claim.Data.ID, accounts[0].user.ID)
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, verificationURL, "cookie:"+accounts[0].cookie, map[string]string{"verification_method": "document_review", "verification_note": "Synthetic current approval verified."})
+	if status != http.StatusCreated {
+		t.Fatalf("record verification for current claim approval: status %d response %s", status, body)
+	}
+	status, body = integrationRequest(t, accounts[0].client, http.MethodGet, server.URL+"/api/v1/staff/institutions/"+institutionID+"/claims", "cookie:"+accounts[0].cookie, nil)
+	var verifiedClaims struct {
+		Data []map[string]any `json:"data"`
+	}
+	if status != http.StatusOK || json.Unmarshal(body, &verifiedClaims) != nil {
+		t.Fatalf("read staff claims after recording verification: status %d response %s", status, body)
+	}
+	var foundVerification bool
+	for _, staffClaim := range verifiedClaims.Data {
+		if staffClaim["id"] == claim.Data.ID {
+			foundVerification = staffClaim["verification_method"] == "document_review" && staffClaim["verified_at"] != ""
+			break
+		}
+	}
+	if !foundVerification {
+		t.Fatalf("staff claim response omitted its current verification details: %s", body)
+	}
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
+	if status != http.StatusCreated {
+		t.Fatalf("handover after current approval and recorded verification should succeed: status %d response %s", status, body)
 	}
 	status, _ = integrationRequest(t, accounts[0].client, http.MethodPost, handoverURL, "cookie:"+accounts[0].cookie, handoverPayload)
 	if status != http.StatusConflict {

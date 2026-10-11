@@ -259,7 +259,7 @@ export function SearchView() {
           <div>
             <div className='flex justify-between gap-3'>
               <div>
-                <StatusPill tone='green'>Found · reviewed</StatusPill>
+                <StatusPill tone='green'>{activeItem.kind} · reviewed</StatusPill>
                 <h2 className='mt-2 text-base font-bold'>{activeItem.title}</h2>
               </div>
               <button
@@ -280,17 +280,23 @@ export function SearchView() {
             <div className='mt-4 rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100'>
               Safe public summary · some identifying details are intentionally withheld.
             </div>
-            {claimSent ? (
-              <p className='mt-3 text-xs font-semibold text-primary'>
-                Demo claim saved privately for staff review. No one has been contacted.
-              </p>
+            {activeItem.kind === 'Found' ? (
+              claimSent ? (
+                <p className='mt-3 text-xs font-semibold text-primary'>
+                  Demo claim saved privately for staff review. No one has been contacted.
+                </p>
+              ) : (
+                <button
+                  onClick={() => setClaimSent(true)}
+                  className='mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground'
+                >
+                  I think this is mine
+                </button>
+              )
             ) : (
-              <button
-                onClick={() => setClaimSent(true)}
-                className='mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground'
-              >
-                I think this is mine
-              </button>
+              <p className='mt-3 rounded-lg bg-secondary p-3 text-xs leading-5 text-secondary-foreground'>
+                This listing is marked Missing. Claims can only be made against found items.
+              </p>
             )}
           </div>
         </div>

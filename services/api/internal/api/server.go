@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/auth"
@@ -108,6 +109,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/staff/institutions/{institutionID}/claims", s.staffClaims)
 	s.mux.HandleFunc("PATCH /api/v1/staff/institutions/{institutionID}/cases/{caseID}", s.updateCase)
 	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/claims/{claimID}/review", s.reviewClaim)
+	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/claims/{claimID}/verification", s.recordClaimVerification)
 	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/items/{itemID}/review", s.reviewItem)
 	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/cases/{caseID}/handover", s.handover)
 	s.mux.HandleFunc("GET /api/v1/institutions/{institutionID}/stats", s.institutionStats)
@@ -445,7 +447,7 @@ func (s *Server) createClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	var id string
-	err = tx.QueryRow(r.Context(), `INSERT INTO claims(item_id,claimant_id,statement,contact_details,evidence_reference,status) SELECT id,$2,$3,$4,$5,'pending' FROM public_items WHERE id::text=$1 RETURNING id::text`, input.ItemID, u.ID, input.Statement, input.Contact, input.Evidence).Scan(&id)
+	err = tx.QueryRow(r.Context(), `INSERT INTO claims(item_id,claimant_id,statement,contact_details,evidence_reference,status) SELECT id,$2,$3,$4,$5,'pending' FROM public_items WHERE id::text=$1 AND kind='found' RETURNING id::text`, input.ItemID, u.ID, input.Statement, input.Contact, input.Evidence).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusBadRequest, "invalid_item", "item unavailable or claim invalid")
 		return
@@ -563,7 +565,7 @@ func (s *Server) staffClaims(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
-	rows, err := tx.Query(r.Context(), `SELECT c.id::text,c.item_id::text,c.claimant_id::text,c.statement,c.contact_details,c.evidence_reference,c.status,c.created_at FROM claims c JOIN items i ON i.id=c.item_id WHERE i.institution_id::text=$1 ORDER BY c.created_at DESC LIMIT 100`, institutionID)
+	rows, err := tx.Query(r.Context(), `SELECT c.id::text,c.item_id::text,c.claimant_id::text,c.statement,c.contact_details,c.evidence_reference,c.status,c.created_at,COALESCE(v.verification_method,''),COALESCE(v.verified_at::text,'') FROM claims c JOIN items i ON i.id=c.item_id LEFT JOIN claim_verifications v ON v.claim_id=c.id AND v.approved_at=c.reviewed_at WHERE i.institution_id::text=$1 ORDER BY c.created_at DESC LIMIT 100`, institutionID)
 	if err != nil {
 		dbfail(w)
 		return
@@ -571,13 +573,13 @@ func (s *Server) staffClaims(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, itemID, claimantID, statement, contact, evidence, status string
+		var id, itemID, claimantID, statement, contact, evidence, status, verificationMethod, verifiedAt string
 		var createdAt time.Time
-		if err := rows.Scan(&id, &itemID, &claimantID, &statement, &contact, &evidence, &status, &createdAt); err != nil {
+		if err := rows.Scan(&id, &itemID, &claimantID, &statement, &contact, &evidence, &status, &createdAt, &verificationMethod, &verifiedAt); err != nil {
 			dbfail(w)
 			return
 		}
-		out = append(out, map[string]any{"id": id, "item_id": itemID, "claimant_id": claimantID, "statement": statement, "contact_details": contact, "evidence_reference": evidence, "status": status, "created_at": createdAt})
+		out = append(out, map[string]any{"id": id, "item_id": itemID, "claimant_id": claimantID, "statement": statement, "contact_details": contact, "evidence_reference": evidence, "status": status, "created_at": createdAt, "verification_method": verificationMethod, "verified_at": verifiedAt})
 	}
 	if rows.Err() != nil {
 		dbfail(w)
@@ -699,6 +701,64 @@ func (s *Server) reviewClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, http.StatusOK, envelope{"data": map[string]string{"status": input.Status}})
 }
+
+func (s *Server) recordClaimVerification(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.staff(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Method string `json:"verification_method"`
+		Note   string `json:"verification_note"`
+	}
+	if body(r, &input) != nil {
+		fail(w, http.StatusBadRequest, "invalid_request", "verification_method and verification_note are required")
+		return
+	}
+	input.Note = strings.TrimSpace(input.Note)
+	if !oneOf(input.Method, "in_person", "video_call", "document_review", "other") || utf8.RuneCountInString(input.Note) < 8 || utf8.RuneCountInString(input.Note) > 2000 {
+		fail(w, http.StatusBadRequest, "invalid_request", "verification_method must be in_person, video_call, document_review, or other, and verification_note must contain 8 to 2000 characters")
+		return
+	}
+	institutionID := r.PathValue("institutionID")
+	tx, err := s.DB.BeginInstitution(r.Context(), user.ID, institutionID)
+	if err != nil {
+		dbfail(w)
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	var claimStatus string
+	var hasApprovalTimestamp bool
+	err = tx.QueryRow(r.Context(), `SELECT c.status,c.reviewed_at IS NOT NULL FROM claims c JOIN items i ON i.id=c.item_id WHERE c.id::text=$1 AND i.institution_id::text=$2 AND i.kind='found' FOR UPDATE OF c`, r.PathValue("claimID"), institutionID).Scan(&claimStatus, &hasApprovalTimestamp)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusNotFound, "not_found", "claim not found")
+		return
+	}
+	if err != nil {
+		dbfail(w)
+		return
+	}
+	if claimStatus != "approved" || !hasApprovalTimestamp {
+		fail(w, http.StatusConflict, "claim_not_approved", "only an approved claim can have a verification recorded")
+		return
+	}
+	var verificationID, verifiedAt string
+	err = tx.QueryRow(r.Context(), `INSERT INTO claim_verifications(claim_id,item_id,institution_id,verified_by,approved_at,verification_method,verification_note) SELECT c.id,c.item_id,i.institution_id,$3,c.reviewed_at,$4,$5 FROM claims c JOIN items i ON i.id=c.item_id WHERE c.id::text=$1 AND i.institution_id::text=$2 AND i.kind='found' AND c.status='approved' AND c.reviewed_at IS NOT NULL ON CONFLICT (claim_id,approved_at) DO NOTHING RETURNING id::text,verified_at::text`, r.PathValue("claimID"), institutionID, user.ID, input.Method, input.Note).Scan(&verificationID, &verifiedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusConflict, "verification_already_recorded", "this approval already has a verification record")
+		return
+	}
+	if err != nil {
+		dbfail(w)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		dbfail(w)
+		return
+	}
+	write(w, http.StatusCreated, envelope{"data": map[string]string{"status": "verified", "verified_at": verifiedAt}})
+}
+
 func (s *Server) handover(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.staff(w, r)
 	if !ok {
@@ -735,13 +795,14 @@ func (s *Server) handover(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusConflict, "handover_not_ready", "the case must be matched before a handover can be recorded")
 		return
 	}
-	var claimApproved bool
-	if err := tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM claims WHERE id::text=$1 AND item_id::text=$2 AND status='approved')`, input.ClaimID, itemID).Scan(&claimApproved); err != nil {
-		dbfail(w)
+	var verifiedClaimID string
+	err = tx.QueryRow(r.Context(), `SELECT c.id::text FROM claims c JOIN claim_verifications v ON v.claim_id=c.id AND v.approved_at=c.reviewed_at JOIN items i ON i.id=c.item_id AND i.kind='found' WHERE c.id::text=$1 AND c.item_id::text=$2 AND c.status='approved' FOR UPDATE OF c`, input.ClaimID, itemID).Scan(&verifiedClaimID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusConflict, "handover_not_verified", "a staff-approved claim with a current recorded verification for this case is required before handover")
 		return
 	}
-	if !claimApproved {
-		fail(w, http.StatusConflict, "handover_not_verified", "a staff-approved claim for this case is required before handover")
+	if err != nil {
+		dbfail(w)
 		return
 	}
 	var alreadyRecorded bool
@@ -778,7 +839,7 @@ func (s *Server) institutionStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	institutionID := r.PathValue("institutionID")
-	allowed, err := s.DB.Member(r.Context(), user.ID, institutionID)
+	allowed, err := s.DB.Member(r.Context(), user.ID, institutionID, "staff", "institution_admin")
 	if err != nil {
 		dbfail(w)
 		return

@@ -157,6 +157,10 @@ export function PublicSearchView() {
       setClaimMessage('Add a short private explanation before continuing.');
       return;
     }
+    if (activeItem.kind !== 'Found') {
+      setClaimMessage('Claims can only be submitted for found-item listings.');
+      return;
+    }
     if (source !== 'api') {
       setClaimMessage(
         source === 'demo'
@@ -278,67 +282,74 @@ export function PublicSearchView() {
             Safe public summary · distinctive identifying details and contact information are
             intentionally withheld.
           </div>
-          <form onSubmit={handleClaim} className='mt-4 max-w-2xl'>
-            <label htmlFor='private-claim' className='block text-xs font-semibold'>
-              Private claim statement{' '}
-              <span className='font-normal text-muted-foreground'>· never posted publicly</span>
-            </label>
-            <textarea
-              id='private-claim'
-              value={claimStatement}
-              onChange={(event) => setClaimStatement(event.target.value)}
-              minLength={8}
-              maxLength={2000}
-              rows={3}
-              className='form-control mt-2 resize-y'
-              placeholder='Describe one private detail that can help staff verify this is yours. Do not share it in public text.'
-              required
-            />
-            <div className='mt-3 flex flex-wrap items-center gap-3'>
-              <button
-                type='submit'
-                disabled={claimBusy}
-                className='rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60'
-              >
-                {claimBusy
-                  ? 'Submitting…'
-                  : source === 'api'
-                    ? 'Submit private claim'
-                    : source === 'demo'
-                      ? 'Save demo claim'
-                      : 'Live claims unavailable'}
-              </button>
-              {source === 'api' && (
-                <Link
-                  href='/auth/sign-in'
-                  className='text-[11px] font-semibold text-primary hover:underline'
+          {activeItem.kind === 'Found' ? (
+            <form onSubmit={handleClaim} className='mt-4 max-w-2xl'>
+              <label htmlFor='private-claim' className='block text-xs font-semibold'>
+                Private claim statement{' '}
+                <span className='font-normal text-muted-foreground'>· never posted publicly</span>
+              </label>
+              <textarea
+                id='private-claim'
+                value={claimStatement}
+                onChange={(event) => setClaimStatement(event.target.value)}
+                minLength={8}
+                maxLength={2000}
+                rows={3}
+                className='form-control mt-2 resize-y'
+                placeholder='Describe one private detail that can help staff verify this is yours. Do not share it in public text.'
+                required
+              />
+              <div className='mt-3 flex flex-wrap items-center gap-3'>
+                <button
+                  type='submit'
+                  disabled={claimBusy}
+                  className='rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60'
                 >
-                  Sign in to claim
-                </Link>
-              )}
-            </div>
-            {claimMessage && (
-              <p
-                role='status'
-                className='mt-3 rounded-lg bg-secondary p-3 text-xs leading-5 text-secondary-foreground'
-              >
-                {claimMessage}
-                {claimMessage.startsWith('Sign in') && (
-                  <>
-                    {' '}
-                    <Link href='/auth/sign-in' className='font-semibold underline'>
-                      Sign in
-                    </Link>{' '}
-                    or{' '}
-                    <Link href='/auth/sign-up' className='font-semibold underline'>
-                      create an account
-                    </Link>
-                    .
-                  </>
+                  {claimBusy
+                    ? 'Submitting…'
+                    : source === 'api'
+                      ? 'Submit private claim'
+                      : source === 'demo'
+                        ? 'Save demo claim'
+                        : 'Live claims unavailable'}
+                </button>
+                {source === 'api' && (
+                  <Link
+                    href='/auth/sign-in'
+                    className='text-[11px] font-semibold text-primary hover:underline'
+                  >
+                    Sign in to claim
+                  </Link>
                 )}
-              </p>
-            )}
-          </form>
+              </div>
+              {claimMessage && (
+                <p
+                  role='status'
+                  className='mt-3 rounded-lg bg-secondary p-3 text-xs leading-5 text-secondary-foreground'
+                >
+                  {claimMessage}
+                  {claimMessage.startsWith('Sign in') && (
+                    <>
+                      {' '}
+                      <Link href='/auth/sign-in' className='font-semibold underline'>
+                        Sign in
+                      </Link>{' '}
+                      or{' '}
+                      <Link href='/auth/sign-up' className='font-semibold underline'>
+                        create an account
+                      </Link>
+                      .
+                    </>
+                  )}
+                </p>
+              )}
+            </form>
+          ) : (
+            <p className='mt-4 rounded-lg bg-secondary p-3 text-xs leading-5 text-secondary-foreground'>
+              This listing is marked Missing. Claims are only for found items; look for a matching
+              Found listing instead.
+            </p>
+          )}
         </section>
       )}
       {filtered.length > 0 ? (
@@ -355,7 +366,7 @@ export function PublicSearchView() {
                 }}
                 className='absolute bottom-4 right-4 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-semibold text-primary hover:bg-secondary'
               >
-                Safe details / claim
+                {item.kind === 'Found' ? 'Safe details / claim' : 'View details'}
               </button>
             </div>
           ))}
