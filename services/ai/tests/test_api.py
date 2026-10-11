@@ -51,6 +51,7 @@ def test_match_ranks_overlap_with_neutral_versioned_signal():
     assert signal["version"] == "v1"
     assert signal["interpretation"] == "uncalibrated_assistive_suggestion_only"
     assert 0 <= signal["score"] <= 1
+    assert result["ranking"] == "local_deterministic_v1"
     assert all("Category terms overlap." in result["suggestions"][0]["explanations"] for _ in [0])
     assert "ownership" in result["notice"]
 
@@ -119,6 +120,7 @@ def test_configured_embeddinggemma_ranker_controls_order_and_signal(monkeypatch)
     assert response.status_code == 200
     result = response.json()["suggestions"]
     assert [item["candidate_id"] for item in result] == ["second", "first"]
+    assert response.json()["ranking"] == "embeddinggemma2_semantic_with_metadata_v1"
     assert result[0]["signal"]["name"] == "embeddinggemma2_semantic_with_metadata"
     assert result[0]["signal"]["interpretation"] == "uncalibrated_assistive_suggestion_only"
     assert "Semantic text similarity surfaced this candidate." in result[0]["explanations"]

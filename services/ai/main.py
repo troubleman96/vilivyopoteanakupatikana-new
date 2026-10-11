@@ -166,6 +166,7 @@ class MatchSuggestion(BaseModel):
 
 class MatchResponse(BaseModel):
     suggestions: list[MatchSuggestion]
+    ranking: str
     notice: str
 
 
@@ -262,12 +263,15 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/readyz")
 async def readyz() -> dict[str, str]:
-    ranking = (
+    return {"status": "ready", "ranking": active_ranking()}
+
+
+def active_ranking() -> str:
+    return (
         "embeddinggemma2_semantic_with_metadata_v1"
         if app.state.embeddinggemma_ranker is not None
         else "local_deterministic_v1"
     )
-    return {"status": "ready", "ranking": ranking}
 
 
 @app.post("/v1/matches", response_model=MatchResponse, dependencies=[Depends(require_service_token)])
@@ -283,5 +287,6 @@ async def matches(payload: MatchRequest) -> MatchResponse:
         raise HTTPException(status_code=503, detail="Matching is temporarily unavailable.") from exc
     return MatchResponse(
         suggestions=suggestions,
+        ranking=active_ranking(),
         notice="Suggestions are assistive ranking signals only; review records independently. They do not verify identity or ownership and must not decide or reject a claim.",
     )

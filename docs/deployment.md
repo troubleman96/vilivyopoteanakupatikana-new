@@ -31,13 +31,13 @@ For an MCP client running on a developer computer, use the service's default std
 
 ### Local EmbeddingGemma 2 test
 
-For a local Compose test, set `EMBEDDINGGEMMA_MODEL_DIR` to the existing checkpoint directory and layer the optional override onto the regular stack:
+For a local Compose test, set `EMBEDDINGGEMMA_MODEL_DIR` to the existing checkpoint directory and layer the optional override onto the regular stack. This explicit override also enables the Go API's matching flag for the local checkpoint; only reviewed public-safe summaries are sent for ranking:
 
 ```bash
 EMBEDDINGGEMMA_MODEL_DIR=/absolute/path/to/embeddinggemma-2-google \
   docker compose -f compose.yaml -f compose.embeddinggemma.yaml up --build ai
 ```
 
-The override mounts model files read-only at `/models/embeddinggemma-2-google`; it publishes no AI host port. The Python service reports the active ranker at `/readyz`. The standard Compose setup remains usable without a checkpoint and uses its deterministic fallback. See [the AI service guide](../services/ai/README.md) for a standalone synthetic request test.
+The override mounts model files read-only at `/models/embeddinggemma-2-google`; it publishes no AI host port. Public search uses semantic ranking for reviewed listings, and the authenticated staff queue can request counterpart suggestions after a human approves a redacted public summary. The Python service reports the active ranker at `/readyz` and in match responses. The standard Compose setup remains usable without a checkpoint and uses text search. See [the AI service guide](../services/ai/README.md) for a standalone synthetic request test.
 
 Before production deployment, configure HTTPS at the edge, Supabase, least-privilege database access, tenant isolation, backups, monitoring, rate limiting, audit trails, secure secret injection, retention and deletion policies, incident response, and institution-approved operational procedures. No institution has approved a pilot; demo names and records are fictional.

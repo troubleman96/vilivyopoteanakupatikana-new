@@ -55,10 +55,15 @@ export type StaffCase = {
   item_id: string;
   status: string;
   kind: 'lost' | 'found';
+  category: string;
   private_title: string;
   private_description: string;
   private_location: string;
-  contact_details?: string | null;
+  review_status: string;
+  visibility: string;
+  public_title: string;
+  public_description: string;
+  public_location: string;
 };
 
 export type StaffClaim = {
@@ -74,15 +79,27 @@ export type StaffClaim = {
 
 export type MatchSuggestion = {
   candidate_id: string;
+  title: string;
+  category: string;
   rank: number;
-  signal: { name: string; version: string; score: number; interpretation: string };
+  signal?: { name: string; version: string; score: number; interpretation: string };
   explanations: string[];
 };
 
+export type SearchRankingSource = 'embeddinggemma' | 'assistive_ai' | 'text_search';
+
+export type PublicSearchResponse = {
+  source: SearchRankingSource;
+  items: PublicApiItem[];
+  ranking?: string;
+  notice?: string;
+};
+
 export type MatchSuggestionResponse = {
-  source: 'assistive_ai' | 'text_search';
-  suggestions: MatchSuggestion[] | { item_id: string; title: string; category: string }[];
+  source: SearchRankingSource;
+  suggestions: MatchSuggestion[];
   decision: 'staff_review_required';
+  ranking?: string;
   notice?: string;
 };
 
@@ -107,7 +124,10 @@ function getErrorMessage(payload: unknown): string {
   return 'The request could not be completed.';
 }
 
-async function requestData<T>(path: string, options: { token?: string; method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}): Promise<T> {
+async function requestData<T>(
+  path: string,
+  options: { token?: string; method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}
+): Promise<T> {
   if (!API_BASE_URL) throw new Error('The Go API is not configured.');
   const headers = new Headers({ Accept: 'application/json' });
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
@@ -117,7 +137,7 @@ async function requestData<T>(path: string, options: { token?: string; method?: 
     method: options.method ?? 'GET',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    cache: 'no-store',
+    cache: 'no-store'
   });
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) throw new Error(getErrorMessage(payload));
@@ -131,7 +151,11 @@ export function isApiConfigured(): boolean {
 export async function fetchPublicItems(): Promise<PublicApiItem[]> {
   const data = await requestData<unknown>('/items');
   if (!Array.isArray(data)) throw new Error('The API returned an invalid listing collection.');
-  return data.filter((item): item is PublicApiItem =>
+  return data.filter(isPublicApiItem);
+}
+
+function isPublicApiItem(item: unknown): item is PublicApiItem {
+  return (
     isRecord(item) &&
     typeof item.id === 'string' &&
     typeof item.institution_id === 'string' &&
@@ -144,14 +168,38 @@ export async function fetchPublicItems(): Promise<PublicApiItem[]> {
   );
 }
 
+export async function searchPublicItems(
+  filters: { query?: string; kind?: 'lost' | 'found'; category?: string } = {}
+): Promise<PublicSearchResponse> {
+  const params = new URLSearchParams();
+  if (filters.query?.trim()) params.set('q', filters.query.trim());
+  if (filters.kind) params.set('kind', filters.kind);
+  if (filters.category) params.set('category', filters.category);
+  const data = await requestData<unknown>(`/items/search?${params.toString()}`);
+  if (
+    !isRecord(data) ||
+    !Array.isArray(data.items) ||
+    !['embeddinggemma', 'assistive_ai', 'text_search'].includes(String(data.source))
+  ) {
+    throw new Error('The API returned an invalid search response.');
+  }
+  return {
+    source: data.source as SearchRankingSource,
+    items: data.items.filter(isPublicApiItem),
+    ranking: typeof data.ranking === 'string' ? data.ranking : undefined,
+    notice: typeof data.notice === 'string' ? data.notice : undefined
+  };
+}
+
 export async function fetchPublicInstitutions(): Promise<PublicInstitution[]> {
   const data = await requestData<unknown>('/institutions');
   if (!Array.isArray(data)) throw new Error('The API returned an invalid institution collection.');
-  return data.filter((item): item is PublicInstitution =>
-    isRecord(item) &&
-    typeof item.id === 'string' &&
-    typeof item.name === 'string' &&
-    typeof item.region === 'string'
+  return data.filter(
+    (item): item is PublicInstitution =>
+      isRecord(item) &&
+      typeof item.id === 'string' &&
+      typeof item.name === 'string' &&
+      typeof item.region === 'string'
   );
 }
 
@@ -169,12 +217,27 @@ export function toListingCard(item: PublicApiItem): LostFoundItem {
         : normalized.includes('laptop') || normalized.includes('electronic')
           ? 'laptop'
           : 'bottle';
-  const tone: LostFoundItem['tone'] = icon === 'keys' ? 'sand' : icon === 'headphones' ? 'lavender' : icon === 'bag' ? 'peach' : icon === 'laptop' ? 'mint' : 'blue';
+  const tone: LostFoundItem['tone'] =
+    icon === 'keys'
+      ? 'sand'
+      : icon === 'headphones'
+        ? 'lavender'
+        : icon === 'bag'
+          ? 'peach'
+          : icon === 'laptop'
+            ? 'mint'
+            : 'blue';
   const rawDate = item.occurred_on ?? '';
   const parsedDate = rawDate ? new Date(`${rawDate}T00:00:00Z`) : null;
-  const date = parsedDate && !Number.isNaN(parsedDate.valueOf())
-    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(parsedDate)
-    : 'Date not shared';
+  const date =
+    parsedDate && !Number.isNaN(parsedDate.valueOf())
+      ? new Intl.DateTimeFormat('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC'
+        }).format(parsedDate)
+      : 'Date not shared';
 
   return {
     id: item.id,
@@ -186,7 +249,7 @@ export function toListingCard(item: PublicApiItem): LostFoundItem {
     status: 'Reviewed',
     description: item.description,
     icon,
-    tone,
+    tone
   };
 }
 
@@ -198,11 +261,18 @@ export async function getSupabaseAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-export async function submitReport(token: string, input: CreateReportInput): Promise<{ id: string; status: string }> {
+export async function submitReport(
+  token: string,
+  input: CreateReportInput
+): Promise<{ id: string; status: string }> {
   return requestData('/reports', { method: 'POST', token, body: input });
 }
 
-export async function submitPrivateClaim(token: string, itemId: string, statement: string): Promise<{ id: string; status: string }> {
+export async function submitPrivateClaim(
+  token: string,
+  itemId: string,
+  statement: string
+): Promise<{ id: string; status: string }> {
   return requestData('/me/claims', { method: 'POST', token, body: { item_id: itemId, statement } });
 }
 
@@ -218,19 +288,59 @@ export async function fetchStaffCases(token: string, institutionId: string): Pro
   return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/cases`, { token });
 }
 
-export async function fetchStaffClaims(token: string, institutionId: string): Promise<StaffClaim[]> {
+export async function fetchStaffClaims(
+  token: string,
+  institutionId: string
+): Promise<StaffClaim[]> {
   return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/claims`, { token });
 }
 
-export async function updateStaffCase(token: string, institutionId: string, caseId: string, status: string): Promise<{ status: string }> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/cases/${encodeURIComponent(caseId)}`, { method: 'PATCH', token, body: { status } });
+export async function updateStaffCase(
+  token: string,
+  institutionId: string,
+  caseId: string,
+  status: string
+): Promise<{ status: string }> {
+  return requestData(
+    `/staff/institutions/${encodeURIComponent(institutionId)}/cases/${encodeURIComponent(caseId)}`,
+    { method: 'PATCH', token, body: { status } }
+  );
 }
 
-export async function reviewStaffClaim(token: string, institutionId: string, claimId: string, status: string, staffNote = ''): Promise<{ status: string }> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/review`, { method: 'POST', token, body: { status, staff_note: staffNote } });
+export async function reviewStaffClaim(
+  token: string,
+  institutionId: string,
+  claimId: string,
+  status: string,
+  staffNote = ''
+): Promise<{ status: string }> {
+  return requestData(
+    `/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/review`,
+    { method: 'POST', token, body: { status, staff_note: staffNote } }
+  );
 }
 
-export async function fetchInstitutionStats(token: string, institutionId: string): Promise<InstitutionStats> {
+export async function reviewStaffItem(
+  token: string,
+  institutionId: string,
+  itemId: string,
+  input: {
+    status: 'approved' | 'rejected';
+    public_title?: string;
+    public_description?: string;
+    public_location?: string;
+  }
+): Promise<{ review_status: string; visibility: string }> {
+  return requestData(
+    `/staff/institutions/${encodeURIComponent(institutionId)}/items/${encodeURIComponent(itemId)}/review`,
+    { method: 'POST', token, body: input }
+  );
+}
+
+export async function fetchInstitutionStats(
+  token: string,
+  institutionId: string
+): Promise<InstitutionStats> {
   return requestData(`/institutions/${encodeURIComponent(institutionId)}/stats`, { token });
 }
 
@@ -238,6 +348,14 @@ export async function fetchPlatformStats(token: string): Promise<PlatformStats> 
   return requestData('/platform/stats', { token });
 }
 
-export async function suggestStaffMatches(token: string, institutionId: string, itemId: string): Promise<MatchSuggestionResponse> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`, { method: 'POST', token, body: { item_id: itemId } });
+export async function suggestStaffMatches(
+  token: string,
+  institutionId: string,
+  itemId: string
+): Promise<MatchSuggestionResponse> {
+  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`, {
+    method: 'POST',
+    token,
+    body: { item_id: itemId }
+  });
 }

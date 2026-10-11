@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -42,6 +44,11 @@ type Item struct {
 
 var institutions = []map[string]any{{"id": "example-university", "name": "Example University", "region": "Dar es Salaam", "active": true}}
 var fixtures = []Item{{ID: "sample-item-001", InstitutionID: "example-university", InstitutionName: "Example University", Category: "electronics", Title: "Black water bottle", Description: "Black reusable water bottle found near the library.", Location: "Library entrance", OccurredOn: "2025-02-12", Status: "found", ReviewStatus: "approved"}, {ID: "sample-item-002", InstitutionID: "example-university", InstitutionName: "Example University", Category: "accessories", Title: "Blue umbrella", Description: "Foldable blue umbrella reported missing.", Location: "Student commons", OccurredOn: "2025-02-14", Status: "lost", ReviewStatus: "approved"}, {ID: "private-draft", InstitutionID: "example-university", InstitutionName: "Example University", Category: "identity", Title: "Unreviewed card", Description: "DO NOT PUBLISH", Location: "Office", Status: "found", ReviewStatus: "pending"}}
+
+var (
+	emailPattern = regexp.MustCompile(`\b[^\s@]+@[^\s@]+\.[^\s@]+\b`)
+	phonePattern = regexp.MustCompile(`\+?[0-9][0-9 .()/-]{7,}[0-9]`)
+)
 
 func New(db *store.Store, v auth.Validator, demo bool, ai string) *Server {
 	s := &Server{DB: db, Auth: v, Demo: demo, AIURL: ai, mux: http.NewServeMux()}
@@ -79,6 +86,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/institutions", s.listInstitutions)
 	s.mux.HandleFunc("GET /api/v1/institutions/{institutionID}", s.getInstitution)
 	s.mux.HandleFunc("GET /api/v1/items", s.listItems)
+	s.mux.HandleFunc("GET /api/v1/items/search", s.searchPublicItems)
 	s.mux.HandleFunc("GET /api/v1/items/{itemID}", s.getItem)
 	s.mux.HandleFunc("POST /api/v1/reports", s.createReport)
 	s.mux.HandleFunc("GET /api/v1/me/reports", s.myReports)
@@ -197,6 +205,116 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, envelope{"data": o})
 }
+
+func hasContactDetails(value string) bool {
+	return emailPattern.MatchString(value) || phonePattern.MatchString(value)
+}
+
+func (s *Server) searchPublicItems(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	institutionID := strings.TrimSpace(r.URL.Query().Get("institution_id"))
+	if len(query) > 200 || len(category) > 80 || len(institutionID) > 100 || (kind != "" && kind != "lost" && kind != "found") || hasContactDetails(query) {
+		fail(w, http.StatusBadRequest, "invalid_search", "search filters are invalid or contain contact details")
+		return
+	}
+
+	if query != "" && s.AIMatchingEnabled && s.AIURL != "" {
+		candidates, err := s.publicSearchCandidates(r, kind, category, institutionID)
+		if err == nil {
+			queryRecord := aiRecord{RecordID: "public-search-query", Category: category, Description: query}
+			aiCandidates := make([]aiRecord, 0, len(candidates))
+			byID := make(map[string]Item, len(candidates))
+			for _, candidate := range candidates {
+				aiCandidates = append(aiCandidates, aiRecordForPublicItem(candidate))
+				byID[candidate.ID] = candidate
+			}
+			if result, matchErr := s.callMatchService(r.Context(), queryRecord, aiCandidates); matchErr == nil {
+				items := make([]map[string]any, 0, len(result.Suggestions))
+				for _, suggestion := range result.Suggestions {
+					if item, ok := byID[suggestion.CandidateID]; ok {
+						items = append(items, publicItem(item))
+					}
+				}
+				write(w, http.StatusOK, envelope{"data": map[string]any{"source": rankingSource(result.Ranking), "items": items, "ranking": result.Ranking, "notice": "Results rank reviewed public summaries only. Similarity is a search aid, not identity or ownership evidence."}})
+				return
+			}
+		}
+	}
+
+	if s.DB == nil {
+		if !s.Demo {
+			fail(w, http.StatusServiceUnavailable, "unavailable", "database is not configured")
+			return
+		}
+		items := make([]map[string]any, 0, len(fixtures))
+		for _, item := range fixtures {
+			if item.ReviewStatus != "approved" || (kind != "" && item.Kind != kind) || (category != "" && item.Category != category) || (institutionID != "" && item.InstitutionID != institutionID) {
+				continue
+			}
+			text := strings.ToLower(item.Title + " " + item.Description + " " + item.Category + " " + item.Location)
+			if query == "" || strings.Contains(text, strings.ToLower(query)) {
+				items = append(items, publicItem(item))
+			}
+		}
+		write(w, http.StatusOK, envelope{"data": map[string]any{"source": "text_search", "items": items, "notice": "Showing reviewed public summaries using text search."}})
+		return
+	}
+
+	rows, err := s.DB.Pool.Query(r.Context(), `SELECT i.id::text,i.institution_id::text,u.name,i.category,i.public_title,i.public_description,i.public_location,COALESCE(i.occurred_on::text,''),i.kind,i.status FROM items i JOIN institutions u ON u.id=i.institution_id WHERE i.review_status='approved' AND i.visibility='public' AND i.status NOT IN ('returned','closed') AND u.active=true AND ($1='' OR to_tsvector('simple',coalesce(i.public_title,'')||' '||coalesce(i.public_description,'')||' '||coalesce(i.category,'')) @@ plainto_tsquery('simple',$1)) AND ($2='' OR i.kind=$2) AND ($3='' OR i.category=$3) AND ($4='' OR i.institution_id::text=$4) ORDER BY i.created_at DESC LIMIT 100`, query, kind, category, institutionID)
+	if err != nil {
+		dbfail(w)
+		return
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var item Item
+		if rows.Scan(&item.ID, &item.InstitutionID, &item.InstitutionName, &item.Category, &item.Title, &item.Description, &item.Location, &item.OccurredOn, &item.Kind, &item.Status) == nil {
+			items = append(items, publicItem(item))
+		}
+	}
+	if rows.Err() != nil {
+		dbfail(w)
+		return
+	}
+	write(w, http.StatusOK, envelope{"data": map[string]any{"source": "text_search", "items": items, "notice": "Showing reviewed public summaries using text search."}})
+}
+
+func (s *Server) publicSearchCandidates(r *http.Request, kind, category, institutionID string) ([]Item, error) {
+	if s.DB == nil {
+		if !s.Demo {
+			return nil, errors.New("database is not configured")
+		}
+		items := make([]Item, 0, len(fixtures))
+		for _, item := range fixtures {
+			if item.ReviewStatus == "approved" && (kind == "" || item.Kind == kind) && (category == "" || item.Category == category) && (institutionID == "" || item.InstitutionID == institutionID) {
+				items = append(items, item)
+			}
+		}
+		return items, nil
+	}
+	rows, err := s.DB.Pool.Query(r.Context(), `SELECT i.id::text,i.institution_id::text,u.name,i.category,i.public_title,i.public_description,i.public_location,COALESCE(i.occurred_on::text,''),i.kind,i.status FROM items i JOIN institutions u ON u.id=i.institution_id WHERE i.review_status='approved' AND i.visibility='public' AND i.status NOT IN ('returned','closed') AND u.active=true AND ($1='' OR i.kind=$1) AND ($2='' OR i.category=$2) AND ($3='' OR i.institution_id::text=$3) ORDER BY i.created_at DESC LIMIT 50`, kind, category, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Item, 0, 50)
+	for rows.Next() {
+		var item Item
+		if err := rows.Scan(&item.ID, &item.InstitutionID, &item.InstitutionName, &item.Category, &item.Title, &item.Description, &item.Location, &item.OccurredOn, &item.Kind, &item.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func aiRecordForPublicItem(item Item) aiRecord {
+	return aiRecord{RecordID: item.ID, Category: item.Category, Description: strings.TrimSpace(item.Title + " " + item.Description), ObservedDate: item.OccurredOn, Location: item.Location}
+}
+
 func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("itemID")
 	if s.DB == nil {
@@ -375,7 +493,7 @@ func (s *Server) staffCases(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.staff(w, r); !ok {
 		return
 	}
-	rows, e := s.DB.Pool.Query(r.Context(), `SELECT c.id::text,c.item_id::text,c.status,i.kind,i.private_title,i.private_description,i.private_location,i.contact_details FROM cases c JOIN items i ON i.id=c.item_id WHERE c.institution_id::text=$1 ORDER BY c.created_at DESC`, r.PathValue("institutionID"))
+	rows, e := s.DB.Pool.Query(r.Context(), `SELECT c.id::text,c.item_id::text,c.status,i.kind,i.category,i.private_title,i.private_description,i.private_location,i.review_status,i.visibility,i.public_title,i.public_description,i.public_location FROM cases c JOIN items i ON i.id=c.item_id WHERE c.institution_id::text=$1 ORDER BY c.created_at DESC`, r.PathValue("institutionID"))
 	if e != nil {
 		dbfail(w)
 		return
@@ -383,10 +501,9 @@ func (s *Server) staffCases(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, it, st, k, t, d, l string
-		var contact *string
-		if rows.Scan(&id, &it, &st, &k, &t, &d, &l, &contact) == nil {
-			out = append(out, map[string]any{"id": id, "item_id": it, "status": st, "kind": k, "private_title": t, "private_description": d, "private_location": l, "contact_details": contact})
+		var id, it, st, k, category, t, d, l, reviewStatus, visibility, publicTitle, publicDescription, publicLocation string
+		if rows.Scan(&id, &it, &st, &k, &category, &t, &d, &l, &reviewStatus, &visibility, &publicTitle, &publicDescription, &publicLocation) == nil {
+			out = append(out, map[string]any{"id": id, "item_id": it, "status": st, "kind": k, "category": category, "private_title": t, "private_description": d, "private_location": l, "review_status": reviewStatus, "visibility": visibility, "public_title": publicTitle, "public_description": publicDescription, "public_location": publicLocation})
 		}
 	}
 	write(w, 200, envelope{"data": out})
@@ -426,8 +543,8 @@ func (s *Server) reviewItem(w http.ResponseWriter, r *http.Request) {
 		PublicDescription string `json:"public_description"`
 		PublicLocation    string `json:"public_location"`
 	}
-	if body(r, &b) != nil || (b.Status != "approved" && b.Status != "rejected") || (b.Status == "approved" && b.PublicTitle == "") {
-		fail(w, 400, "invalid_request", "status must be approved or rejected; approval requires public_title")
+	if body(r, &b) != nil || (b.Status != "approved" && b.Status != "rejected") || (b.Status == "approved" && (strings.TrimSpace(b.PublicTitle) == "" || len(b.PublicTitle) > 120 || len(b.PublicDescription) > 2000 || len(b.PublicLocation) > 120 || hasContactDetails(b.PublicTitle+" "+b.PublicDescription+" "+b.PublicLocation))) {
+		fail(w, 400, "invalid_request", "approval requires a safe public title, description, and location without contact details")
 		return
 	}
 	visibility := "private"
@@ -593,8 +710,66 @@ type aiMatchRequest struct {
 }
 
 type aiMatchResponse struct {
-	Suggestions []any  `json:"suggestions"`
-	Notice      string `json:"notice"`
+	Suggestions []aiMatchSuggestion `json:"suggestions"`
+	Ranking     string              `json:"ranking"`
+	Notice      string              `json:"notice"`
+}
+
+type aiMatchSuggestion struct {
+	CandidateID  string        `json:"candidate_id"`
+	Rank         int           `json:"rank"`
+	Signal       aiMatchSignal `json:"signal"`
+	Explanations []string      `json:"explanations"`
+}
+
+type aiMatchSignal struct {
+	Name           string  `json:"name"`
+	Version        string  `json:"version"`
+	Score          float64 `json:"score"`
+	Interpretation string  `json:"interpretation"`
+}
+
+func rankingSource(ranking string) string {
+	if strings.HasPrefix(ranking, "embeddinggemma2_") {
+		return "embeddinggemma"
+	}
+	if ranking != "" {
+		return "assistive_ai"
+	}
+	return "assistive_ai"
+}
+
+func (s *Server) callMatchService(parent context.Context, query aiRecord, candidates []aiRecord) (aiMatchResponse, error) {
+	if !s.AIMatchingEnabled || strings.TrimSpace(s.AIURL) == "" {
+		return aiMatchResponse{}, errors.New("matching is not enabled")
+	}
+	encoded, err := json.Marshal(aiMatchRequest{Query: query, Candidates: candidates})
+	if err != nil {
+		return aiMatchResponse{}, err
+	}
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AIURL, "/")+"/v1/matches", bytes.NewReader(encoded))
+	if err != nil {
+		return aiMatchResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.AIToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.AIToken)
+	}
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	if err != nil {
+		return aiMatchResponse{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return aiMatchResponse{}, errors.New("matching service unavailable")
+	}
+	var result aiMatchResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
+		return aiMatchResponse{}, err
+	}
+	return result, nil
 }
 
 func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
@@ -620,16 +795,19 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 		dbfail(w)
 		return
 	}
-	rows, e := s.DB.Pool.Query(r.Context(), `SELECT id::text,category,concat_ws(' ',NULLIF(public_title,''),NULLIF(public_description,'')),COALESCE(occurred_on::text,''),public_location FROM items WHERE institution_id::text=$1 AND id::text<>$2 AND kind<>$3 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') ORDER BY created_at DESC LIMIT 50`, institutionID, b.ItemID, itemKind)
+	rows, e := s.DB.Pool.Query(r.Context(), `SELECT id::text,category,concat_ws(' ',NULLIF(public_title,''),NULLIF(public_description,'')),COALESCE(occurred_on::text,''),public_location,public_title FROM items WHERE institution_id::text=$1 AND id::text<>$2 AND kind<>$3 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') ORDER BY created_at DESC LIMIT 50`, institutionID, b.ItemID, itemKind)
 	if e != nil {
 		dbfail(w)
 		return
 	}
 	candidates := []aiRecord{}
+	candidateDetails := map[string]map[string]string{}
 	for rows.Next() {
 		var candidate aiRecord
-		if rows.Scan(&candidate.RecordID, &candidate.Category, &candidate.Description, &candidate.ObservedDate, &candidate.Location) == nil {
+		var title string
+		if rows.Scan(&candidate.RecordID, &candidate.Category, &candidate.Description, &candidate.ObservedDate, &candidate.Location, &title) == nil {
 			candidates = append(candidates, candidate)
+			candidateDetails[candidate.RecordID] = map[string]string{"title": title, "category": candidate.Category}
 		}
 	}
 	rowErr := rows.Err()
@@ -638,30 +816,15 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 		dbfail(w)
 		return
 	}
-	if s.AIMatchingEnabled && s.AIURL != "" {
-		encoded, marshalErr := json.Marshal(aiMatchRequest{Query: query, Candidates: candidates})
-		if marshalErr == nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-			defer cancel()
-			req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AIURL, "/")+"/v1/matches", bytes.NewReader(encoded))
-			if requestErr == nil {
-				req.Header.Set("Content-Type", "application/json")
-				if s.AIToken != "" {
-					req.Header.Set("Authorization", "Bearer "+s.AIToken)
-				}
-				resp, requestErr := (&http.Client{Timeout: 8 * time.Second}).Do(req)
-				if requestErr == nil {
-					defer resp.Body.Close()
-					if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-						var result aiMatchResponse
-						if json.NewDecoder(http.MaxBytesReader(w, resp.Body, 1<<20)).Decode(&result) == nil {
-							write(w, 200, envelope{"data": map[string]any{"source": "assistive_ai", "suggestions": result.Suggestions, "notice": result.Notice, "decision": "staff_review_required"}})
-							return
-						}
-					}
-				}
+	if result, matchErr := s.callMatchService(r.Context(), query, candidates); matchErr == nil {
+		suggestions := make([]map[string]any, 0, len(result.Suggestions))
+		for _, suggestion := range result.Suggestions {
+			if detail, ok := candidateDetails[suggestion.CandidateID]; ok {
+				suggestions = append(suggestions, map[string]any{"candidate_id": suggestion.CandidateID, "title": detail["title"], "category": detail["category"], "rank": suggestion.Rank, "signal": suggestion.Signal, "explanations": suggestion.Explanations})
 			}
 		}
+		write(w, http.StatusOK, envelope{"data": map[string]any{"source": rankingSource(result.Ranking), "suggestions": suggestions, "ranking": result.Ranking, "notice": result.Notice, "decision": "staff_review_required"}})
+		return
 	}
 	textQuery := strings.TrimSpace(query.Category + " " + query.Description)
 	rows, e = s.DB.Pool.Query(r.Context(), `SELECT id::text,public_title,category FROM items WHERE institution_id::text=$2 AND id::text<>$3 AND kind<>$4 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') AND ($1='' OR to_tsvector('simple',coalesce(public_title,'')||' '||coalesce(public_description,'')||' '||coalesce(category,'')) @@ plainto_tsquery('simple',$1)) ORDER BY created_at DESC LIMIT 10`, textQuery, institutionID, b.ItemID, itemKind)
@@ -670,18 +833,18 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-	out := []map[string]string{}
+	out := []map[string]any{}
 	for rows.Next() {
 		var id, title, category string
 		if rows.Scan(&id, &title, &category) == nil {
-			out = append(out, map[string]string{"item_id": id, "title": title, "category": category})
+			out = append(out, map[string]any{"candidate_id": id, "title": title, "category": category, "rank": len(out) + 1, "explanations": []string{"Public text terms overlap."}})
 		}
 	}
 	if rows.Err() != nil {
 		dbfail(w)
 		return
 	}
-	write(w, 200, envelope{"data": map[string]any{"source": "text_search", "suggestions": out, "decision": "staff_review_required"}})
+	write(w, 200, envelope{"data": map[string]any{"source": "text_search", "suggestions": out, "notice": "Text matches are leads only; an authorized staff reviewer must verify records independently.", "decision": "staff_review_required"}})
 }
 func oneOf(s string, a ...string) bool {
 	for _, x := range a {

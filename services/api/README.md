@@ -20,14 +20,16 @@ For database mode set `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_ANON_KEY`, t
 
 - `GET /healthz` liveness; `GET /readyz` readiness.
 - `GET /api/v1/institutions`, `/api/v1/institutions/{institutionID}`.
-- `GET /api/v1/items?q=...`, `/api/v1/items/{itemID}`: approved, public-safe projections only.
+- `GET /api/v1/items?q=...`, `/api/v1/items/search?q=...`, `/api/v1/items/{itemID}`: approved, public-safe projections only. The search endpoint uses EmbeddingGemma to rank reviewed public summaries when matching is enabled; otherwise it uses text search.
 - `POST /api/v1/reports`: authenticated report, held private pending staff review. Staff can make a reviewed/redacted public projection via `POST /api/v1/staff/institutions/{institutionID}/items/{itemID}/review`.
 - `GET /api/v1/me/reports`; `POST /api/v1/me/claims`; `GET /api/v1/me/claims`.
 - `GET /api/v1/staff/institutions/{institutionID}/cases`, `GET .../claims`, `PATCH .../cases/{caseID}`, `POST .../claims/{claimID}/review`, `POST .../cases/{caseID}/handover`.
 - `GET /api/v1/institutions/{institutionID}/stats`, `GET /api/v1/platform/stats`.
-- `POST /api/v1/staff/institutions/{institutionID}/matches/suggest`: staff-only suggestions from reviewed public-safe records in the same institution. Matching is disabled by default (`AI_MATCHING_ENABLED=false`); the endpoint then uses tenant-scoped text search. Enabling the private Python ranker requires an explicit feature flag and optional `AI_SERVICE_TOKEN`; suggestions never decide claims. CORS is restricted to comma-separated `CORS_ALLOWED_ORIGINS` (default `http://localhost:3000`).
+- `POST /api/v1/staff/institutions/{institutionID}/matches/suggest`: authenticated staff suggestions from reviewed public-safe records in the same institution. The staff queue can approve a manually redacted public summary, then request possible counterpart suggestions. Matching is disabled by default (`AI_MATCHING_ENABLED=false`); the endpoint then uses tenant-scoped text search. Suggestions never decide claims or verify ownership. CORS is restricted to comma-separated `CORS_ALLOWED_ORIGINS` (default `http://localhost:3000`).
 
 Private and staff routes require a verified Supabase identity and a configured database. Staff/admin scope comes exclusively from active database membership; platform aggregate data requires explicit active platform admin membership. Errors use `{"error":{"code":"...","message":"..."}}`. Private claims, contacts, evidence references, staff notes and handover data are never included in public item DTOs.
+
+The public search and staff matching workflows send only reviewed public-safe summaries to the private matching service. The normal Compose stack leaves AI ranking off; layer `compose.embeddinggemma.yaml` with a configured local checkpoint to enable EmbeddingGemma for synthetic/local testing. The browser never calls the AI service directly, and public search never reads pending reports or private claims.
 
 ## Security / rollout caveats
 

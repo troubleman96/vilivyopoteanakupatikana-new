@@ -77,7 +77,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
         bullets: [
           'GET /healthz and GET /readyz — process and dependency status.',
           'GET /api/v1/institutions and GET /api/v1/institutions/{institutionID} — active institution directory.',
-          'GET /api/v1/items?q={query} and GET /api/v1/items/{itemID} — approved public listings; private evidence and contact details are not part of the response.'
+          'GET /api/v1/items?q={query}, GET /api/v1/items/search?q={query}, and GET /api/v1/items/{itemID} — approved public listings; search can rank reviewed public-safe summaries with EmbeddingGemma when explicitly enabled.'
         ],
         code: 'curl "http://localhost:8080/api/v1/items?q=blue%20umbrella"'
       },
@@ -105,7 +105,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'POST /api/v1/staff/institutions/{institutionID}/items/{itemID}/review — review a report before publication.',
           'POST /api/v1/staff/institutions/{institutionID}/cases/{caseID}/handover — staff-coordinated return event.',
           'GET /api/v1/institutions/{institutionID}/stats and GET /api/v1/platform/stats — role-checked aggregates.',
-          'POST /api/v1/staff/institutions/{institutionID}/matches/suggest — private, institution-scoped suggestions; matching is disabled by default.'
+          'POST /api/v1/staff/institutions/{institutionID}/matches/suggest — institution-scoped suggestions from reviewed public-safe records; the live queue invokes this only after a human approves a redacted public summary.'
         ]
       },
       {
@@ -126,7 +126,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
     title: 'AI suggestions and embeddings',
     eyebrow: 'PYTHON AI SERVICE',
     summary:
-      'The private Python matcher can use a local EmbeddingGemma 2 checkpoint for semantic candidate ranking, with a deterministic fallback when no model path is configured.',
+      'Public search and the authenticated staff queue can use a local EmbeddingGemma 2 checkpoint for semantic ranking of reviewed public-safe summaries; text search remains the default unless the local model override is explicitly enabled.',
     sections: [
       {
         title: 'What runs today',
@@ -134,7 +134,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'services/ai/ is a private FastAPI service that ranks up to 50 candidate records. When EMBEDDINGGEMMA_MODEL_PATH points to a local checkpoint, the service uses EmbeddingGemma 2 retrieval embeddings alongside category, date, and location signals. Its score is uncalibrated and is not a probability or confidence that two records refer to the same object.',
           'The model is loaded only from a configured local path; weights are not downloaded at runtime, and request embeddings are not persisted. With no model path the deterministic lexical/category/date/location fallback remains available. The Go API integration flag AI_MATCHING_ENABLED defaults to false.'
         ],
-        code: 'Go API (authorized staff request)\n  → private Python ranker (optional)\n  → ranked suggestions + neutral overlap reasons\n  → staff independently verify; human review remains authoritative'
+        code: 'Public search or authorized staff request\n  → Go API sends reviewed public-safe summaries to the private Python ranker\n  → ranked suggestions + neutral overlap reasons\n  → staff independently verify; human review remains authoritative'
       },
       {
         title: 'Embeddings, in brief',
@@ -158,7 +158,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'Obtain institutional approval and document an authorized purpose before using real records.',
           'Minimize and redact inputs; never embed contacts, account identifiers, private claims, evidence, or withheld verification clues.',
           'Keep retrieval tenant-scoped and enforce institution isolation in the backend and data store.',
-          'Keep matching opt-in and off by default; monitor access, retention, deletion, and model/version changes.',
+          'Keep production matching opt-in and off by default; the local checkpoint override is an explicit opt-in for synthetic/local testing. Monitor access, retention, deletion, and model/version changes.',
           'Evaluate false matches, language and category performance, score calibration, and human factors using approved data.',
           'Present suggestions as leads only; people independently verify every claim and handover.'
         ]

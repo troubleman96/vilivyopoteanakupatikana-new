@@ -1,4 +1,8 @@
 services:
+  api:
+    environment:
+      AI_MATCHING_ENABLED: "true"
+
   ai:
     environment:
       EMBEDDINGGEMMA_MODEL_PATH: /models/embeddinggemma-2-google
