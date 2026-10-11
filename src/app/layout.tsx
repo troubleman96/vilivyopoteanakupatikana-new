@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: '%s · Vilivyopotea na Kupatikana'
   },
   description:
-    'A careful lost-and-found service for Tanzania: public discovery, private claims and staff-mediated returns.',
+    'A pre-pilot lost-and-found concept for Tanzania. Preview safer listings, private claims and human-led returns using fictional demo data.',
   applicationName: 'Vilivyopotea na Kupatikana',
   robots: { index: false, follow: false }
 };
