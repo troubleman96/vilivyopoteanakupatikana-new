@@ -44,7 +44,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, and web app. By default only web and API are published on localhost; PostgreSQL and AI are not host-published. For a temporary hosted test URL, set `PUBLIC_BIND_ADDRESS=0.0.0.0` in the local `.env`; do not use this setting for an untrusted public deployment. Open <http://localhost:3000>; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
+Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, and web app. By default only web and API are published on localhost (ports 3000 and 8080); PostgreSQL and AI are not host-published. For a temporary hosted test URL, set `PUBLIC_BIND_ADDRESS=0.0.0.0` in the local `.env`; adjust `WEB_HOST_PORT` and `API_HOST_PORT` if those ports are occupied. Do not use the all-interface setting for an untrusted public deployment. Open <http://localhost:3000>; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
 
 Without Supabase settings, public demo reads can use synthetic API fixtures and private operations fail closed. To enable Supabase Auth, configure both browser and server values in `.env`:
 
