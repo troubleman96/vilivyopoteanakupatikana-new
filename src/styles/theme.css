@@ -1,0 +1,33 @@
+/* Keep every starter appearance available in the theme chooser. */
+@import './themes/vilivyopotea.css';
+@import './themes/claude.css';
+@import './themes/discord.css';
+@import './themes/supabase.css';
+@import './themes/vercel.css';
+@import './themes/mono.css';
+@import './themes/notebook.css';
+@import './themes/light-green.css';
+@import './themes/zen.css';
+@import './themes/astro-vista.css';
+@import './themes/whatsapp.css';
+
+body {
+  @apply overscroll-none;
+}
+
+:root {
+  --header-height: calc(var(--spacing, 0.25rem) * 14 + 1px);
+}
+
+[data-theme] body {
+  --font-sans: initial;
+  --font-mono: initial;
+  --font-serif: initial;
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .form-control {
+    @apply w-full rounded-xl border border-input bg-background px-3 py-2.5 text-xs font-normal text-foreground outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring;
+  }
+}
