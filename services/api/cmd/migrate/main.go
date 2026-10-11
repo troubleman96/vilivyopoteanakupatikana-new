@@ -8,18 +8,27 @@ import (
 	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/config"
 )
 
 const publicViewRole = "vilivyopotea_public_reader"
 
 func main() {
-	url := os.Getenv("DATABASE_URL")
+	url, err := config.SecretEnv("DATABASE_URL")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if url == "" {
 		fmt.Fprintln(os.Stderr, "DATABASE_URL is required")
 		os.Exit(1)
 	}
 	appRole := os.Getenv("APP_DATABASE_USER")
-	appPassword := os.Getenv("APP_DATABASE_PASSWORD")
+	appPassword, err := config.SecretEnv("APP_DATABASE_PASSWORD")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if appRole == "" || appPassword == "" {
 		fmt.Fprintln(os.Stderr, "APP_DATABASE_USER and APP_DATABASE_PASSWORD are required")
 		os.Exit(1)
@@ -151,7 +160,9 @@ func grantRuntimePrivileges(ctx context.Context, pool *pgxpool.Pool, role string
 		`GRANT SELECT, INSERT, UPDATE ON items, cases, claims TO %I`,
 		`GRANT SELECT, INSERT ON handovers TO %I`,
 		`GRANT SELECT, INSERT ON claim_verifications TO %I`,
+		`GRANT SELECT, INSERT ON operational_audit_events TO %I`,
 		`GRANT USAGE, SELECT ON SEQUENCE auth_email_outbox_id_seq TO %I`,
+		`GRANT USAGE, SELECT ON SEQUENCE operational_audit_events_id_seq TO %I`,
 	}
 	for _, grant := range grants {
 		var statement string

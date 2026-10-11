@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -25,6 +26,8 @@ type Server struct {
 	AIToken            string
 	AIMatchingEnabled  bool
 	CORSAllowedOrigins []string
+	trustedProxies     []*net.IPNet
+	metrics            apiMetrics
 	mux                *http.ServeMux
 }
 type envelope map[string]any
@@ -53,6 +56,10 @@ func New(db *store.Store, v auth.Validator, ai string) *Server {
 	return s
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.observeHTTP(w, r, s.serveHTTP)
+}
+
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	allowed := false
 	for _, candidate := range s.CORSAllowedOrigins {
@@ -87,6 +94,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { write(w, 200, envelope{"status": "ok"}) })
 	s.mux.HandleFunc("GET /readyz", s.ready)
+	s.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) { s.metrics.serve(w) })
 	s.mux.HandleFunc("POST /api/v1/auth/register", s.registerAccount)
 	s.mux.HandleFunc("POST /api/v1/auth/login", s.signIn)
 	s.mux.HandleFunc("POST /api/v1/auth/verify-email", s.verifyEmail)
@@ -187,6 +195,9 @@ func publicItem(x Item) map[string]any {
 	return map[string]any{"id": x.ID, "institution_id": x.InstitutionID, "institution_name": x.InstitutionName, "category": x.Category, "title": x.Title, "description": x.Description, "location": x.Location, "occurred_on": x.OccurredOn, "kind": kind, "status": x.Status}
 }
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
+	if !s.allowRateLimit(w, r, "public-items-list-ip", s.requestAddress(r), 120, time.Minute, "too many public listing requests; try again later") {
+		return
+	}
 	if err := s.DB.Ensure(); err != nil {
 		fail(w, http.StatusServiceUnavailable, "unavailable", "database is not configured")
 		return
@@ -223,6 +234,9 @@ func (s *Server) searchPublicItems(w http.ResponseWriter, r *http.Request) {
 	institutionID := strings.TrimSpace(r.URL.Query().Get("institution_id"))
 	if len(query) > 200 || len(category) > 80 || len(institutionID) > 100 || (kind != "" && kind != "lost" && kind != "found") || hasContactDetails(query) {
 		fail(w, http.StatusBadRequest, "invalid_search", "search filters are invalid or contain contact details")
+		return
+	}
+	if !s.allowRateLimit(w, r, "public-search-ip", s.requestAddress(r), 60, time.Minute, "too many public search requests; try again later") {
 		return
 	}
 	if err := s.DB.Ensure(); err != nil {
@@ -348,6 +362,9 @@ func (s *Server) createReport(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !s.allowRateLimit(w, r, "report-user", u.ID, 10, time.Hour, "report submission limit reached; try again later") {
+		return
+	}
 	var input struct {
 		InstitutionID string `json:"institution_id"`
 		Kind          string `json:"kind"`
@@ -428,6 +445,9 @@ func (s *Server) myReports(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createClaim(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.private(w, r)
 	if !ok {
+		return
+	}
+	if !s.allowRateLimit(w, r, "claim-user", u.ID, 5, time.Hour, "claim submission limit reached; try again later") {
 		return
 	}
 	var input struct {
@@ -626,6 +646,10 @@ func (s *Server) reviewItem(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not_found", "item not found")
 		return
 	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "item.reviewed", "item", r.PathValue("itemID"), map[string]any{"review_status": input.Status}); err != nil {
+		dbfail(w)
+		return
+	}
 	if err := tx.Commit(r.Context()); err != nil {
 		dbfail(w)
 		return
@@ -658,6 +682,10 @@ func (s *Server) updateCase(w http.ResponseWriter, r *http.Request) {
 	}
 	if tag.RowsAffected() == 0 {
 		fail(w, http.StatusNotFound, "not_found", "case not found")
+		return
+	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "case.updated", "case", r.PathValue("caseID"), map[string]any{"status": input.Status}); err != nil {
+		dbfail(w)
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
@@ -693,6 +721,10 @@ func (s *Server) reviewClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	if tag.RowsAffected() == 0 {
 		fail(w, http.StatusNotFound, "not_found", "claim not found")
+		return
+	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "claim.reviewed", "claim", r.PathValue("claimID"), map[string]any{"status": input.Status}); err != nil {
+		dbfail(w)
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
@@ -749,6 +781,10 @@ func (s *Server) recordClaimVerification(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err != nil {
+		dbfail(w)
+		return
+	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "claim.verified", "claim", r.PathValue("claimID"), map[string]any{"verification_method": input.Method}); err != nil {
 		dbfail(w)
 		return
 	}
@@ -824,6 +860,10 @@ func (s *Server) handover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.Exec(r.Context(), `UPDATE items SET status='returned' WHERE id=(SELECT item_id FROM cases WHERE id::text=$1 AND institution_id::text=$2)`, r.PathValue("caseID"), institutionID); err != nil {
+		dbfail(w)
+		return
+	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "handover.recorded", "case", r.PathValue("caseID"), map[string]any{}); err != nil {
 		dbfail(w)
 		return
 	}
@@ -958,6 +998,10 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	institutionID := r.PathValue("institutionID")
+	if !s.allowRateLimit(w, r, "staff-matching", user.ID+":"+institutionID, 10, 15*time.Minute, "matching suggestions are temporarily rate-limited; try again later") {
+		return
+	}
 	var input struct {
 		ItemID       string `json:"item_id"`
 		Category     string `json:"category"`
@@ -969,7 +1013,6 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	}
 	input.ItemID = strings.TrimSpace(input.ItemID)
 	input.Category = strings.TrimSpace(input.Category)
-	institutionID := r.PathValue("institutionID")
 	tx, err := s.DB.BeginInstitution(r.Context(), user.ID, institutionID)
 	if err != nil {
 		dbfail(w)
@@ -1008,6 +1051,15 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	rowsErr := rows.Err()
 	rows.Close()
 	if rowsErr != nil {
+		dbfail(w)
+		return
+	}
+	if err := recordAuditEvent(r.Context(), tx, institutionID, user.ID, "match.shortlist_requested", "item", query.RecordID, map[string]any{
+		"candidate_count":        len(candidates),
+		"category_filter_used":   input.Category != "",
+		"date_window_days":       input.MaxDaysApart,
+		"assistive_ai_available": s.AIMatchingEnabled,
+	}); err != nil {
 		dbfail(w)
 		return
 	}

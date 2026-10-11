@@ -1,30 +1,42 @@
-# Deployment
+# Deployment and operational controls
 
-This repository is a pre-pilot product monorepo, not the unmodified dashboard starter. The root Next.js application serves the public landing page, individual workspace, institution/security-staff workspace, system-admin preview, and developer docs. The Go API, private Python matching service, and optional FastMCP adapter are separate services.
+This repository is a pre-pilot product monorepo, not an approved production service. The root Next.js application, Go API, private Python matching service and optional FastMCP adapter are separate services. **Use synthetic data only until the written institution-approval gate is complete.**
 
-## Web application
+## Local development
 
-The Next.js app can deploy to Vercel or anywhere Docker runs. `next.config.ts` enables standalone output when `BUILD_STANDALONE=true`. Configure `NEXT_PUBLIC_API_BASE_URL` to point to the Go API. Account sign-up and sign-in are served by the Go API and require PostgreSQL; the web app has no third-party identity dependency.
+The base `compose.yaml` binds the web app and API to localhost by default; PostgreSQL and AI remain on private Docker networks. Local `.env` values are for synthetic testing only. Do not commit `.env` files, secret mounts, backups, certificate data or real user/institution records. `AI_MATCHING_ENABLED` remains `false` by default.
 
-For other platforms, see the [Next.js deployment docs](https://nextjs.org/docs/app/getting-started/deploying).
+## Production HTTPS overlay
 
-## Environment and trust boundaries
+The `compose.production.yaml` overlay removes direct host-published web/API ports and adds Caddy on ports 80/443. Caddy obtains and renews HTTPS certificates automatically and routes `/api/*` to the Go API and other paths to the web app. Before starting it, an authorized operator must configure public DNS for `PUBLIC_HOSTNAME`, allow inbound TCP 80/443 (and UDP 443 for HTTP/3), and set `ACME_EMAIL`. Caddy certificate/private-key state lives in its named Docker volume and needs protected backup/access controls. Do not expose PostgreSQL, AI, `/metrics`, or the API directly.
 
-- `NEXT_PUBLIC_API_BASE_URL` points the browser to the Go API's public routes.
-- `DATABASE_URL` configures the Go API and migration executable for local PostgreSQL.
-- The PostgreSQL password must be randomly generated and injected as a secret; do not commit `.env` files.
-- `AI_MATCHING_ENABLED` stays false unless the feature has completed privacy, security, and institutional review.
-- The Python AI service is private; it must not be published directly to the internet.
-- EmbeddingGemma 2 loads only from an explicitly mounted local checkpoint. Keep embeddings transient, use only minimized/authorized text, and do not treat similarity as ownership evidence.
-- MCP exposes only reviewed public listings and the active institution directory. Its local HTTP transport binds to loopback by default.
-- Private claims, contacts, evidence, staff notes, and handover data are not public outputs.
-- Local account passwords are bcrypt-hashed. Sign-in sets a `__Host-vp_session` cookie with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`. PostgreSQL stores only its digest; explicit sign-out, sign-out-all and password reset revoke sessions.
-- Email verification and password recovery use single-use tokens; token digests are in PostgreSQL. This phase queues message bodies with raw links in the private local `auth_email_outbox` test sink only. Do not enter real user email addresses or institutional data until an approved email provider, access controls and retention are configured.
-- Auth throttles use shared PostgreSQL fixed-window buckets and the direct peer address. If deployed behind a reverse proxy, use a reviewed edge rate limit or explicitly configure trusted proxy handling; do not trust arbitrary `Forwarded`/`X-Forwarded-For` values.
-- Cookie-authenticated mutations require an exact allowed `Origin`; set `CORS_ALLOWED_ORIGINS` to the actual browser origins. Serve the app/API over HTTPS in production; the API always marks session cookies `Secure`.
+Create a separate, permission-restricted `.env.production` containing non-secret settings and **file paths**, not secret values. Set `PUBLIC_HOSTNAME`, `ACME_EMAIL`, `AI_MATCHING_ENABLED=false`, `POSTGRES_PASSWORD_FILE`, `POSTGRES_APP_PASSWORD_FILE`, `MIGRATION_DATABASE_URL_FILE`, `RUNTIME_DATABASE_URL_FILE`, and `AI_SERVICE_TOKEN_FILE`; the corresponding files must exist before Compose starts. The mounted files contain, respectively, the PostgreSQL bootstrap password, runtime-role password, migration-owner DSN, restricted runtime-role DSN, and internal AI bearer token. Keep the owner DSN mounted only in the one-shot `migrate` service. Protect source files outside the repository with the approved secret-store/host permissions. Never put the secrets themselves in `.env.production`.
 
-## Docker Compose
+A reviewed operator may validate/launch the overlay with:
 
-The default Compose stack publishes web and API on localhost; PostgreSQL and the AI service remain on a private network. Compose applies SQL migrations before starting the API. Set a generated `POSTGRES_PASSWORD` in the untracked local `.env` file. Demo API fixture reads are disabled by default; private routes fail closed if PostgreSQL is unavailable.
+```sh
+docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml config
+docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up --build -d
+```
 
-Before any real deployment, complete institution onboarding and approval, privacy/legal review, production email delivery and a recovery runbook, rate-limit behavior behind the selected network edge, least-privilege database access and tenant/RLS review, backups and a restore drill, monitoring and audit trails, secure secret injection, outbox/token retention and deletion rules, incident response, accessibility and an institution-approved pilot. No institution has approved a pilot; demo names and records are fictional.
+The overlay pins Caddy to `172.30.40.10/24` by default and sets that exact address as the only trusted proxy for rate-limit client-IP extraction. If the default network conflicts with an existing subnet, change `APP_NETWORK_SUBNET`, `CADDY_APP_IP`, and `TRUSTED_PROXY_CIDRS` together; do not broaden the trusted range casually. Caddy overwrites `X-Forwarded-For`; the API ignores forwarded IP headers from every untrusted peer. Production origins and browser API URL are built as the selected HTTPS hostname. Change domain/CORS choices before deployment and rebuild the web image after changing them.
+
+The overlay mounts secrets read-only using Compose file secrets. The API/migration tools also support `DATABASE_URL_FILE`, `APP_DATABASE_PASSWORD_FILE`, and `AI_SERVICE_TOKEN_FILE` in other approved runtimes; supplying a non-empty inline value and a file path together is rejected. Enabling AI matching requires a non-empty internal token on the Go API and an authenticated private AI service. No production hostname, secret values, certificate, mail provider, monitoring backend or institution configuration is set in this repository.
+
+## Rate limiting, logs and monitoring
+
+Shared PostgreSQL fixed-window limits apply to authentication, public listing/search, report and claim submissions, and staff matching. Account/IP bucket identifiers are hashed in the database. The initial values are conservative starting points and require review against pilot traffic and any legal/accessibility requirements. `GET /metrics` reports process-local aggregate request/status/duration and throttle counters only; scrape it from a private network and never proxy it publicly. API JSON logs include request ID, method, coarse route family, status and duration, but not IPs, query strings, bodies, tokens, claim text, contact details or record descriptions.
+
+Staff listing/claim/case/handover decisions and matching-shortlist requests are transactionally captured in the tenant-RLS `operational_audit_events` table. Metadata is bounded and content-free. The table is not exposed by a public endpoint; access and review of audit rows must be assigned to authorized institutional operators.
+
+## Backups, restore and retention
+
+Use `scripts/ops/backup-postgres.sh` from an approved backup runner with a dedicated backup role and passfile secret. The script validates custom-format archives, writes checksums, requires age encryption by default, and requires an explicit approved `BACKUP_RETENTION_DAYS`. Set `BACKUP_AGE_RECIPIENT` to an institution-custodied public recipient; keep the private identity separate from backup storage. Use a protected/ephemeral `TMPDIR` for plaintext staging. Plaintext backup output is refused unless both `BACKUP_ENCRYPTION_REQUIRED=false` and `BACKUP_ALLOW_UNENCRYPTED_SYNTHETIC=true` are explicitly set for a synthetic local test.
+
+Run `scripts/ops/restore-drill-postgres.sh <archive>` only against a newly created disposable database ending in `_restore_test`. It restores without silently dropping existing objects and checks for the application schema. Run drills in an isolated environment and record the date, archive checksum, result, elapsed time and RPO/RTO. Never point the drill script at a production database.
+
+`docs/privacy-retention.md` contains an explicit proposed schedule for institution review. `scripts/ops/retention-sweep.sh` requires all five retention durations and a maintenance-role passfile; it has no automatic schedule and deletes nothing unless an operator intentionally runs it. Approve/adjust periods with the institution before scheduling it. Backups also need a tested deletion/expiry process, encrypted storage and key-custody review.
+
+## Incident response and pilot gate
+
+Use `docs/incident-response.md` as a local runbook template; before a pilot, name real institutional incident/security/privacy contacts and determine applicable notification timelines. See `docs/pilot-readiness.md` for the written approval and service-readiness gate. DIT has not approved a pilot, so do not enable live traffic, use real records, or set `AI_MATCHING_ENABLED=true` unless/until the authorized institution grants written approval and all required deployment controls have been verified.

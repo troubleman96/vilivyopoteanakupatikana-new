@@ -152,6 +152,7 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM claims WHERE item_id=$1`, itemID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM items WHERE id=$1`, itemID)
 		}
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM operational_audit_events WHERE institution_id IN ($1,$2)`, institutionID, otherInstitutionID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM institutions WHERE id IN ($1,$2)`, institutionID, otherInstitutionID)
 	}()
 
@@ -661,6 +662,13 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 	status, _ = integrationRequest(t, account.client, http.MethodGet, server.URL+"/api/v1/auth/me", "cookie:"+account.cookie, nil)
 	if status != http.StatusUnauthorized {
 		t.Fatalf("logout-all left another account session valid: status %d", status)
+	}
+	var reviewAuditCount, verificationAuditCount, handoverAuditCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE action='claim.reviewed'), count(*) FILTER (WHERE action='claim.verified'), count(*) FILTER (WHERE action='handover.recorded') FROM operational_audit_events WHERE institution_id=$1`, institutionID).Scan(&reviewAuditCount, &verificationAuditCount, &handoverAuditCount); err != nil {
+		t.Fatal(err)
+	}
+	if reviewAuditCount == 0 || verificationAuditCount == 0 || handoverAuditCount != 1 {
+		t.Fatalf("unexpected audit records: claim reviews=%d verifications=%d handovers=%d", reviewAuditCount, verificationAuditCount, handoverAuditCount)
 	}
 
 	t.Logf("passed 50 synthetic PostgreSQL accounts: email verification/resend, secure cookies, login throttling, password reset and session revocation, private record isolation, institution authorization, and controlled handover")

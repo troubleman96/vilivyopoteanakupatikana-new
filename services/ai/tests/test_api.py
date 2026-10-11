@@ -193,6 +193,22 @@ def test_optional_bearer_token_when_configured(monkeypatch):
     monkeypatch.delenv("AI_SERVICE_TOKEN")
 
 
+def test_mounted_bearer_token_and_required_secret_fail_closed(monkeypatch, tmp_path):
+    token_file = tmp_path / "ai-token"
+    token_file.write_text("synthetic-mounted-token\n", encoding="utf-8")
+    monkeypatch.delenv("AI_SERVICE_TOKEN", raising=False)
+    monkeypatch.setenv("AI_SERVICE_TOKEN_FILE", str(token_file))
+    monkeypatch.setenv("AI_SERVICE_TOKEN_REQUIRED", "true")
+    body = {"query": BASE_QUERY, "candidates": []}
+    assert client.post("/v1/matches", json=body).status_code == 401
+    assert client.post("/v1/matches", json=body, headers={"Authorization": "Bearer synthetic-mounted-token"}).status_code == 200
+
+    monkeypatch.setenv("AI_SERVICE_TOKEN_FILE", str(tmp_path / "missing-token"))
+    response = client.post("/v1/matches", json=body, headers={"Authorization": "Bearer synthetic-mounted-token"})
+    assert response.status_code == 503
+    assert "synthetic-mounted-token" not in response.text
+
+
 def test_oversized_body_rejected():
     response = client.post("/v1/matches", content=b" " * (1024 * 1024 + 1), headers={"Content-Type": "application/json"})
     assert response.status_code == 413

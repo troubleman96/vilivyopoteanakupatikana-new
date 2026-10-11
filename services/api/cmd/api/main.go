@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -17,15 +18,23 @@ import (
 )
 
 func main() {
-	c := config.Load()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	c, err := config.Load()
+	if err != nil {
+		slog.Error("invalid API configuration", "error", err)
+		os.Exit(1)
+	}
+	if c.AIMatchingEnabled && c.AIServiceToken == "" {
+		slog.Error("AI matching requires a configured internal service token")
+		os.Exit(1)
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	var db *store.Store
 	if c.DatabaseURL != "" {
-		var e error
-		db, e = store.Open(ctx, c.DatabaseURL)
-		if e != nil {
-			log.Printf("database unavailable; private operations disabled: %v", e)
+		db, err = store.Open(ctx, c.DatabaseURL)
+		if err != nil {
+			slog.Error("database unavailable; private operations disabled", "error", err)
 		} else {
 			defer db.Pool.Close()
 		}
@@ -42,6 +51,10 @@ func main() {
 	h.AIToken = c.AIServiceToken
 	h.AIMatchingEnabled = c.AIMatchingEnabled
 	h.CORSAllowedOrigins = c.CORSAllowedOrigins
+	if err := h.SetTrustedProxyCIDRs(c.TrustedProxyCIDRs); err != nil {
+		slog.Error("invalid trusted proxy configuration", "error", err)
+		os.Exit(1)
+	}
 	srv := &http.Server{Addr: c.Addr, Handler: h, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
@@ -49,8 +62,9 @@ func main() {
 		defer c()
 		_ = srv.Shutdown(stop)
 	}()
-	log.Printf("API listening on %s", c.Addr)
-	if e := srv.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
-		log.Fatal(e)
+	slog.Info("API listening", "address", c.Addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("API server stopped", "error", err)
+		os.Exit(1)
 	}
 }

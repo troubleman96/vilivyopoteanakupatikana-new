@@ -29,6 +29,8 @@ The role areas and developer portal are routes in one Next.js app to preserve th
 - The MCP server is read-only and has no tools for private reports, claims, staff queues, handovers, or administration. Its HTTP mode should remain local or behind a reviewed, trusted network boundary.
 - This is a pre-pilot foundation, not authorization to collect personal data or launch. Obtain institutional approval and complete local privacy, security, retention, abuse-response, accessibility, and operational reviews first.
 
+Phase-five operational references: [HTTPS and secret-file deployment](docs/deployment.md), [privacy and retention proposal](docs/privacy-retention.md), [incident response template](docs/incident-response.md), and the [institution-approved pilot gate](docs/pilot-readiness.md). These are implementation materials, not institutional approval.
+
 ## Run the web app
 
 Requirements: Node.js 22+ and pnpm 10+.
@@ -52,7 +54,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, and web app. By default only web and API are published on localhost (ports 3000 and 8080); PostgreSQL and AI are not host-published. For a temporary hosted test URL, set `PUBLIC_BIND_ADDRESS=0.0.0.0` in the local `.env`; adjust `WEB_HOST_PORT` and `API_HOST_PORT` if those ports are occupied. Do not use the all-interface setting for an untrusted public deployment. Open <http://localhost:3000>; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
+Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, and web app. By default only web and API are published on localhost (ports 3000 and 8080); PostgreSQL and AI are not host-published. Do not change `PUBLIC_BIND_ADDRESS` to expose these development ports publicly. For an authorized HTTPS deployment, follow [docs/deployment.md](docs/deployment.md) and its Caddy overlay prerequisites. Open <http://localhost:3000>; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
 
 The optional Compose MCP profile runs the MCP adapter on the private Docker network only; it publishes no host port:
 

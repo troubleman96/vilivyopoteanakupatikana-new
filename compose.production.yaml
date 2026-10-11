@@ -1,0 +1,99 @@
+services:
+  database:
+    environment:
+      POSTGRES_PASSWORD: null
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_owner_password
+    secrets:
+      - db_owner_password
+
+  migrate:
+    environment:
+      DATABASE_URL: null
+      DATABASE_URL_FILE: /run/secrets/migration_database_url
+      APP_DATABASE_PASSWORD: null
+      APP_DATABASE_PASSWORD_FILE: /run/secrets/app_database_password
+    secrets:
+      - migration_database_url
+      - app_database_password
+
+  ai:
+    environment:
+      AI_SERVICE_TOKEN: null
+      AI_SERVICE_TOKEN_FILE: /run/secrets/ai_service_token
+      AI_SERVICE_TOKEN_REQUIRED: "true"
+    secrets:
+      - ai_service_token
+
+  api:
+    environment:
+      DATABASE_URL: null
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      PUBLIC_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      AI_SERVICE_TOKEN: null
+      AI_SERVICE_TOKEN_FILE: /run/secrets/ai_service_token
+      AI_MATCHING_ENABLED: ${AI_MATCHING_ENABLED:-false}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.30.40.10/32}
+    secrets:
+      - runtime_database_url
+      - ai_service_token
+    ports: !reset []
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}/api/v1
+        NEXT_PUBLIC_DEMO_MODE: "false"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}/api/v1
+      NEXT_PUBLIC_DEMO_MODE: "false"
+      NEXT_PUBLIC_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+    ports: !reset []
+
+  edge:
+    image: caddy:2.10-alpine
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      app:
+        ipv4_address: ${CADDY_APP_IP:-172.30.40.10}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: ${APP_NETWORK_SUBNET:-172.30.40.0/24}
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  db_owner_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE to a protected secret file}
+  app_database_password:
+    file: ${POSTGRES_APP_PASSWORD_FILE:?Set POSTGRES_APP_PASSWORD_FILE to a protected secret file}
+  migration_database_url:
+    file: ${MIGRATION_DATABASE_URL_FILE:?Set MIGRATION_DATABASE_URL_FILE to a protected secret file}
+  runtime_database_url:
+    file: ${RUNTIME_DATABASE_URL_FILE:?Set RUNTIME_DATABASE_URL_FILE to a protected secret file}
+  ai_service_token:
+    file: ${AI_SERVICE_TOKEN_FILE:?Set AI_SERVICE_TOKEN_FILE to a protected secret file}

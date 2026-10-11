@@ -30,6 +30,13 @@ yarn-error.log*
 .env*
 !.env.example
 .env*.local
+/secrets/
+/backups/
+/ops-backups/
+*.dump
+*.dump.age
+*.dump.sha256
+*.sha256
 
 # vercel
 .vercel

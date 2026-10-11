@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_HOSTNAME} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	@api path /api/*
+	reverse_proxy @api api:8080 {
+		header_up X-Forwarded-For {http.request.remote.host}
+	}
+
+	reverse_proxy web:3000
+}

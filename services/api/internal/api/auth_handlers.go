@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"math"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,18 +33,11 @@ func authUnavailable(w http.ResponseWriter) {
 	fail(w, http.StatusServiceUnavailable, "auth_unavailable", "local authentication requires a configured PostgreSQL database")
 }
 
-func requestAddress(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && host != "" {
-		return host
-	}
-	if r.RemoteAddr == "" {
-		return "unknown"
-	}
-	return r.RemoteAddr
+func (s *Server) allowAuthRate(w http.ResponseWriter, r *http.Request, scope, key string, limit int, window time.Duration) bool {
+	return s.allowRateLimit(w, r, scope, key, limit, window, "too many authentication attempts; try again later")
 }
 
-func (s *Server) allowAuthRate(w http.ResponseWriter, r *http.Request, scope, key string, limit int, window time.Duration) bool {
+func (s *Server) allowRateLimit(w http.ResponseWriter, r *http.Request, scope, key string, limit int, window time.Duration, message string) bool {
 	retry, err := s.Auth.RateLimit(r.Context(), scope, key, limit, window)
 	if err != nil {
 		if errors.Is(err, auth.ErrNotConfigured) {
@@ -56,12 +48,13 @@ func (s *Server) allowAuthRate(w http.ResponseWriter, r *http.Request, scope, ke
 		return false
 	}
 	if retry > 0 {
+		s.metrics.rateLimited.Add(1)
 		seconds := int(math.Ceil(retry.Seconds()))
 		if seconds < 1 {
 			seconds = 1
 		}
 		w.Header().Set("Retry-After", strconv.Itoa(seconds))
-		fail(w, http.StatusTooManyRequests, "rate_limited", "too many authentication attempts; try again later")
+		fail(w, http.StatusTooManyRequests, "rate_limited", message)
 		return false
 	}
 	return true
@@ -69,7 +62,7 @@ func (s *Server) allowAuthRate(w http.ResponseWriter, r *http.Request, scope, ke
 
 func (s *Server) registerAccount(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "register-ip", requestAddress(r), 5, time.Hour) {
+	if !s.allowAuthRate(w, r, "register-ip", s.requestAddress(r), 5, time.Hour) {
 		return
 	}
 	var input credentials
@@ -100,7 +93,7 @@ func (s *Server) registerAccount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "login-ip", requestAddress(r), 25, 15*time.Minute) {
+	if !s.allowAuthRate(w, r, "login-ip", s.requestAddress(r), 25, 15*time.Minute) {
 		return
 	}
 	var input credentials
@@ -132,7 +125,7 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "verify-ip", requestAddress(r), 10, 15*time.Minute) {
+	if !s.allowAuthRate(w, r, "verify-ip", s.requestAddress(r), 10, 15*time.Minute) {
 		return
 	}
 	var input tokenInput
@@ -156,7 +149,7 @@ func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) resendVerification(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "verify-request-ip", requestAddress(r), 5, time.Hour) {
+	if !s.allowAuthRate(w, r, "verify-request-ip", s.requestAddress(r), 5, time.Hour) {
 		return
 	}
 	var input emailInput
@@ -180,7 +173,7 @@ func (s *Server) resendVerification(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "reset-request-ip", requestAddress(r), 5, time.Hour) {
+	if !s.allowAuthRate(w, r, "reset-request-ip", s.requestAddress(r), 5, time.Hour) {
 		return
 	}
 	var input emailInput
@@ -204,7 +197,7 @@ func (s *Server) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	setAuthNoStore(w)
-	if !s.allowAuthRate(w, r, "reset-confirm-ip", requestAddress(r), 10, time.Hour) {
+	if !s.allowAuthRate(w, r, "reset-confirm-ip", s.requestAddress(r), 10, time.Hour) {
 		return
 	}
 	var input credentialsWithToken

@@ -8,6 +8,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -268,7 +269,21 @@ def _rank(request: MatchRequest, embeddinggemma_ranker: Any | None = None) -> li
 
 
 async def require_service_token(authorization: Annotated[str | None, Header()] = None) -> None:
-    expected = os.getenv("AI_SERVICE_TOKEN")
+    inline = os.getenv("AI_SERVICE_TOKEN", "")
+    secret_path = os.getenv("AI_SERVICE_TOKEN_FILE", "").strip()
+    if inline and secret_path:
+        raise HTTPException(status_code=503, detail="Service authentication is unavailable.")
+    if secret_path:
+        try:
+            expected = Path(secret_path).read_text(encoding="utf-8").rstrip("\r\n")
+        except OSError as exc:
+            raise HTTPException(status_code=503, detail="Service authentication is unavailable.") from exc
+        if not expected:
+            raise HTTPException(status_code=503, detail="Service authentication is unavailable.")
+    else:
+        expected = inline
+    if os.getenv("AI_SERVICE_TOKEN_REQUIRED", "").strip().lower() == "true" and not expected:
+        raise HTTPException(status_code=503, detail="Service authentication is unavailable.")
     if expected:
         supplied = authorization.removeprefix("Bearer ") if authorization and authorization.startswith("Bearer ") else ""
         if not hmac.compare_digest(supplied, expected):
