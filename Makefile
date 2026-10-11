@@ -1,4 +1,4 @@
-.PHONY: setup web-dev web-typecheck web-build web-lint api-run api-test api-test-50 ai-setup ai-test mcp-setup mcp-run mcp-test test up down
+.PHONY: setup web-dev landing-dev landing-build institution-dev institution-build admin-dev admin-build web-typecheck web-build web-lint api-run api-test api-test-50 ai-setup ai-test mcp-setup mcp-run mcp-test test up down
 
 setup:
 	pnpm install --ignore-scripts
@@ -6,6 +6,24 @@ setup:
 
 web-dev:
 	pnpm dev
+
+landing-dev:
+	pnpm landing:dev
+
+landing-build:
+	pnpm landing:build
+
+institution-dev:
+	pnpm institution:dev
+
+institution-build:
+	pnpm institution:build
+
+admin-dev:
+	pnpm admin:dev
+
+admin-build:
+	pnpm admin:build
 
 web-typecheck:
 	pnpm typecheck

@@ -7,7 +7,7 @@ The application uses one fixed visual palette: **Lagoon**. There is no in-app pa
 - `src/components/themes/theme.config.ts` sets `DEFAULT_THEME` to `lagoon`.
 - `src/app/layout.tsx` applies that theme to the document root and configures system color mode.
 - `src/styles/theme.css` imports only `src/styles/themes/lagoon.css`.
-- `src/app/layout.tsx` loads Outfit; `src/styles/theme.css` uses it as the sans-serif font.
+- `src/app/layout.tsx` loads Outfit for body text and Bricolage Grotesque for headings and semantic emphasis; `src/styles/theme.css` applies those roles globally.
 
 To adjust the product's colors, edit the Lagoon CSS tokens in `src/styles/themes/lagoon.css`. Keep the `[data-theme='lagoon']` and `[data-theme='lagoon'].dark` selectors in sync so automatic system color mode continues to work. Do not add a user-facing theme selector unless the product requirement changes.
 

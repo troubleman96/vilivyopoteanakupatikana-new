@@ -71,7 +71,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if allowed {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
@@ -113,6 +113,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/me/reports", s.myReports)
 	s.mux.HandleFunc("POST /api/v1/me/claims", s.createClaim)
 	s.mux.HandleFunc("GET /api/v1/me/claims", s.myClaims)
+	s.mux.HandleFunc("GET /api/v1/staff/institutions", s.staffInstitutions)
 	s.mux.HandleFunc("GET /api/v1/staff/institutions/{institutionID}/cases", s.staffCases)
 	s.mux.HandleFunc("GET /api/v1/staff/institutions/{institutionID}/claims", s.staffClaims)
 	s.mux.HandleFunc("PATCH /api/v1/staff/institutions/{institutionID}/cases/{caseID}", s.updateCase)
@@ -122,6 +123,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/cases/{caseID}/handover", s.handover)
 	s.mux.HandleFunc("GET /api/v1/institutions/{institutionID}/stats", s.institutionStats)
 	s.mux.HandleFunc("GET /api/v1/platform/stats", s.platformStats)
+	s.mux.HandleFunc("GET /api/v1/platform/institutions", s.platformInstitutions)
+	s.mux.HandleFunc("POST /api/v1/platform/institutions", s.createPlatformInstitution)
+	s.mux.HandleFunc("PATCH /api/v1/platform/institutions/{institutionID}", s.updatePlatformInstitution)
+	s.mux.HandleFunc("GET /api/v1/platform/institutions/{institutionID}/memberships", s.platformMemberships)
+	s.mux.HandleFunc("PUT /api/v1/platform/institutions/{institutionID}/memberships", s.setPlatformMembership)
+	s.mux.HandleFunc("GET /api/v1/platform/admins", s.platformAdmins)
+	s.mux.HandleFunc("PUT /api/v1/platform/admins", s.setPlatformAdmin)
+	s.mux.HandleFunc("GET /api/v1/platform/audit-events", s.platformAuditEvents)
 	s.mux.HandleFunc("POST /api/v1/staff/institutions/{institutionID}/matches/suggest", s.matchSuggestions)
 }
 func write(w http.ResponseWriter, status int, v any) {

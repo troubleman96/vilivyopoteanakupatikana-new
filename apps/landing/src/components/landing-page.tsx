@@ -1,13 +1,30 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import {
-  IconArrowRight,
-  IconEyeOff,
-  IconLock,
-  IconSearch,
-  IconShieldCheck
-} from '@tabler/icons-react';
-import { BrandMark } from './app-shell';
+import { IconArrowRight, IconEyeOff, IconLock, IconSearch, IconShieldCheck } from './icons';
+
+const PRODUCT_APP_URL = (
+  process.env.NEXT_PUBLIC_PRODUCT_APP_URL ?? 'http://localhost:3000'
+).replace(/\/+$/, '');
+
+function BrandMark() {
+  return (
+    <Link href='/' className='inline-flex items-center gap-2.5' aria-label='Vilivyopotea home'>
+      <span className='flex size-9 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground'>
+        V
+      </span>
+      <span className='leading-tight'>
+        <span className='block font-heading text-sm font-semibold tracking-tight'>
+          Vilivyopotea
+        </span>
+        <span className='block text-[10px] text-muted-foreground'>na Kupatikana</span>
+      </span>
+    </Link>
+  );
+}
+
+function productHref(path: string) {
+  return `${PRODUCT_APP_URL}${path}`;
+}
 
 const steps = [
   {
@@ -73,12 +90,12 @@ export function LandingPage() {
             <a className='transition-colors hover:text-foreground' href='#safety'>
               Safety by design
             </a>
-            <Link className='transition-colors hover:text-foreground' href='/docs'>
+            <Link className='transition-colors hover:text-foreground' href={productHref('/docs')}>
               About the concept
             </Link>
           </nav>
           <Link
-            href='/dashboard/search'
+            href={productHref('/dashboard/search')}
             className='inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:px-5'
           >
             Explore the demo <IconArrowRight aria-hidden size={16} />
@@ -110,7 +127,7 @@ export function LandingPage() {
               </p>
               <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
                 <Link
-                  href='/dashboard/search'
+                  href={productHref('/dashboard/search')}
                   className='group inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/15 transition hover:-translate-y-0.5 hover:shadow-lg'
                 >
                   <IconSearch aria-hidden size={17} />
@@ -309,7 +326,7 @@ export function LandingPage() {
                   prove they own it.
                 </p>
                 <Link
-                  href='/docs'
+                  href={productHref('/docs')}
                   className='mt-6 inline-flex items-center gap-2 text-sm font-semibold text-foreground transition hover:text-primary'
                 >
                   Read the project notes <IconArrowRight aria-hidden size={16} />
@@ -366,7 +383,7 @@ export function LandingPage() {
               </p>
             </div>
             <Link
-              href='/dashboard/search'
+              href={productHref('/dashboard/search')}
               className='inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5'
             >
               Open the demo <IconArrowRight aria-hidden size={16} />
@@ -385,13 +402,19 @@ export function LandingPage() {
             </p>
           </div>
           <div className='flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-muted-foreground'>
-            <Link className='transition hover:text-foreground' href='/dashboard/search'>
+            <Link
+              className='transition hover:text-foreground'
+              href={productHref('/dashboard/search')}
+            >
               Demo search
             </Link>
-            <Link className='transition hover:text-foreground' href='/dashboard/report'>
+            <Link
+              className='transition hover:text-foreground'
+              href={productHref('/dashboard/report')}
+            >
               Demo report
             </Link>
-            <Link className='transition hover:text-foreground' href='/docs'>
+            <Link className='transition hover:text-foreground' href={productHref('/docs')}>
               Project notes
             </Link>
           </div>

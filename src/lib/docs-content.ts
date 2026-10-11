@@ -36,7 +36,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'The Go API and Python AI service remain first-class services. The optional FastMCP adapter is separate from the API and calls only its public, read-only endpoints.'
         ],
         bullets: [
-          'Public landing page: /',
+          'Standalone marketing site: apps/landing/ (localhost:3001)',
           'Individual experience: /dashboard/search, /dashboard/report, and /dashboard/account',
           'Institution and security staff: /dashboard/cases, /dashboard/claims, and /dashboard/institution',
           'System administration: /dashboard/platform (aggregate operational view)',
@@ -169,12 +169,12 @@ export const documentationPages: Record<string, DocumentationPage> = {
     title: 'Next.js application areas',
     eyebrow: 'WEB APP & DEVELOPER SITE',
     summary:
-      'The public product and developer portal share one Next.js App Router application. Their routes are experiences, not independent authorization domains.',
+      'The standalone marketing site links to the product app. The product experiences and developer portal share one Next.js App Router application. Their routes are experiences, not independent authorization domains.',
     sections: [
       {
         title: 'Product experiences',
         bullets: [
-          'Landing page — src/app/page.tsx and the public product story at /. ',
+          'Marketing site — apps/landing/; its calls to action open the product app.',
           'Individual user app — public search, local demo reporting, and account views under /dashboard.',
           'Institution and security staff — case queue, claim review, and institution overview routes.',
           'System admin — /dashboard/platform, intended for platform-level operational aggregates.',

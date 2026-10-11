@@ -9,6 +9,10 @@
 @custom-variant data-horizontal (&[data-orientation='horizontal']);
 @custom-variant data-vertical (&[data-orientation='vertical']);
 
+@theme inline {
+  --font-heading: var(--font-bricolage), sans-serif;
+}
+
 @import './theme.css';
 
 @layer base {

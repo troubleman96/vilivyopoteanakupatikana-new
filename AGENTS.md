@@ -173,7 +173,7 @@ NEXT_PUBLIC_SENTRY_DISABLED="false"  # Set to "true" to disable in dev
 
 ## Appearance
 
-The UI uses the fixed `lagoon` palette and Outfit font. Its light/dark color mode follows the operating system; there are no in-app palette or mode selectors, appearance route, or theme-switching keyboard actions. The palette is loaded from `src/styles/themes/lagoon.css` via `src/styles/theme.css`, with `DEFAULT_THEME` in `src/components/themes/theme.config.ts` set to `lagoon`.
+The UI uses the fixed `lagoon` palette, Outfit for body text, and Bricolage Grotesque for headings and semantic emphasis. Its light/dark color mode follows the operating system; there are no in-app palette or mode selectors, appearance route, or theme-switching keyboard actions. The palette is loaded from `src/styles/themes/lagoon.css` via `src/styles/theme.css`, with `DEFAULT_THEME` in `src/components/themes/theme.config.ts` set to `lagoon`. The standalone marketing app uses the same type roles.
 
 ---
 

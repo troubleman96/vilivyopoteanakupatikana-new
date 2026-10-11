@@ -6,16 +6,17 @@ A Tanzania lost-and-found platform foundation in one repository: a responsive Ne
 
 | Area | Route or location | Purpose |
 | --- | --- | --- |
-| Public landing page | `/` | Explain the service and direct people to safe search and reporting. |
-| Individual user app | `/dashboard/search`, `/dashboard/report`, `/dashboard/account` | Search reviewed listings and manage fictional report/claim previews. |
-| Institution and security staff | `/dashboard/cases`, `/dashboard/claims`, `/dashboard/institution` | Institution-scoped casework, private claim review, and staff overview. |
-| System administration | `/dashboard/platform` | Platform-level operational aggregates; access is enforced by the API in a configured deployment. |
+| Public marketing site | `apps/landing/` (`http://localhost:3001`) | Explain the concept and link visitors to the product app. |
+| Product app | `http://localhost:3000` | Public search, individual account routes, and `/docs`; links to the dedicated operator apps. |
+| Individual user routes | `/dashboard/search`, `/dashboard/report`, `/dashboard/account` | Search reviewed listings and manage fictional report/claim previews. |
+| Institution and security staff app | `apps/institution/` (`http://localhost:3004`) | Institution-scoped cases, claim review, and operational overview. |
+| System administration app | `apps/admin/` (`http://localhost:3003`) | Institution directory, staff memberships, platform administrators, and audit review. |
 | Developer documentation site | `/docs` | Next.js docs covering architecture, API, Python AI and embeddings, web app, MCP, and security boundaries. |
 | FastMCP server | `services/mcp/` | Optional read-only MCP tools for reviewed public listings and the active institution directory. |
 | Go API | `services/api/` | Modular-monolith API, authentication checks, institution scoping, PostgreSQL migrations, and OpenAPI-ready routes. |
 | Python AI service | `services/ai/` | Private matching-suggestion ranker with optional local EmbeddingGemma 2 semantic matching and a deterministic fallback. |
 
-The role areas and developer portal are routes in one Next.js app to preserve the shared Kiranism shell and design system. They are user experiences, not separate trust domains. Local PostgreSQL accounts, institution membership, platform-admin access, and private data scopes are checked server-side.
+The individual product and developer portal share one Next.js app. Institution operations and system administration are separate Next.js apps and deployable URLs. They share the PostgreSQL-backed Go API and session cookie; the apps do not grant trust themselves. Account sessions, institution membership, platform-admin access, and private data scopes are checked server-side.
 
 ## Product and safety boundary
 
@@ -33,7 +34,7 @@ Phase-five operational references: [HTTPS and secret-file deployment](docs/deplo
 
 ## Run the web app
 
-Requirements: Node.js 22+ and pnpm 10+.
+Requirements: Node.js 22+ and pnpm 11+.
 
 ```bash
 pnpm install --ignore-scripts
@@ -41,7 +42,7 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The public site, synthetic workspaces, and `/docs` run without account credentials. Sign-in and registration require the local Go API and PostgreSQL stack. The UI uses a fixed lagoon palette and Outfit font; light or dark mode follows the operating system automatically, with no in-app appearance controls. Demo role switching is only for preview; it never grants real permissions.
+Run `pnpm landing:dev`, `pnpm institution:dev`, and `pnpm admin:dev` in separate terminals for the other apps at ports 3001, 3004, and 3003. The product app runs at port 3000; its root redirects to public search and its sidebar links to the operator apps. Configure `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_PRODUCT_APP_URL`, `NEXT_PUBLIC_INSTITUTION_APP_URL`, and `NEXT_PUBLIC_ADMIN_APP_URL` to change the local URLs. All four frontend origins must be allowed by `CORS_ALLOWED_ORIGINS` when using cookie sessions. Every app uses Outfit for body text and Bricolage Grotesque for headings and emphasized text. The product app uses a fixed Lagoon palette; light or dark mode follows the operating system automatically. Demo role switching is only for preview; it never grants real permissions.
 
 ## Run the local stack
 
@@ -54,7 +55,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, and web app. By default only web and API are published on localhost (ports 3000 and 8080); PostgreSQL and AI are not host-published. Do not change `PUBLIC_BIND_ADDRESS` to expose these development ports publicly. For an authorized HTTPS deployment, follow [docs/deployment.md](docs/deployment.md) and its Caddy overlay prerequisites. Open <http://localhost:3000>; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
+Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, product, marketing, Institution, and Admin apps. The sites and API are published on localhost (ports 3000–3001 and 3003–3004, plus API 8080); PostgreSQL and AI are not host-published. Do not change `PUBLIC_BIND_ADDRESS` to expose these development ports publicly. For an authorized HTTPS deployment, follow [docs/deployment.md](docs/deployment.md) and its Caddy overlay prerequisites. Open <http://localhost:3000>, <http://localhost:3001>, <http://localhost:3003>, or <http://localhost:3004> for the four apps; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
 
 The optional Compose MCP profile runs the MCP adapter on the private Docker network only; it publishes no host port:
 

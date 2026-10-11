@@ -40,43 +40,5 @@ export const navGroups: NavGroup[] = [
         items: []
       }
     ]
-  },
-  {
-    label: 'Institution & security operations',
-    items: [
-      {
-        title: 'Case queue',
-        url: '/dashboard/cases',
-        icon: 'workspace',
-        shortcut: ['c', 'q'],
-        items: []
-      },
-      {
-        title: 'Claim review',
-        url: '/dashboard/claims',
-        icon: 'badgeCheck',
-        shortcut: ['c', 'l'],
-        items: []
-      },
-      {
-        title: 'Institution overview',
-        url: '/dashboard/institution',
-        icon: 'teams',
-        shortcut: ['i', 'i'],
-        items: []
-      }
-    ]
-  },
-  {
-    label: 'System administration',
-    items: [
-      {
-        title: 'System admin overview',
-        url: '/dashboard/platform',
-        icon: 'laptop',
-        shortcut: ['p', 'o'],
-        items: []
-      }
-    ]
   }
 ];

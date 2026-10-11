@@ -45,10 +45,14 @@ The API emits JSON request logs with a random `X-Request-ID`, a coarse route fam
 - `POST /api/v1/reports`: authenticated private report, held pending human review.
 - `GET /api/v1/me/reports`; `POST /api/v1/me/claims`; `GET /api/v1/me/claims`.
 - `GET /api/v1/staff/institutions/{institutionID}/cases`, `GET .../claims`, `PATCH .../cases/{caseID}`, `POST .../claims/{claimID}/review`, `POST .../claims/{claimID}/verification`, `POST .../items/{itemID}/review`, `POST .../cases/{caseID}/handover`.
+- `GET /api/v1/staff/institutions`: institutions where the authenticated account has active staff membership.
 - `GET /api/v1/institutions/{institutionID}/stats`, `GET /api/v1/platform/stats`.
+- Platform-admin-only: `GET /api/v1/platform/institutions`, `POST /api/v1/platform/institutions`, `PATCH /api/v1/platform/institutions/{institutionID}`, `GET/PUT /api/v1/platform/institutions/{institutionID}/memberships`, `GET/PUT /api/v1/platform/admins`, and `GET /api/v1/platform/audit-events`.
 - `POST /api/v1/staff/institutions/{institutionID}/matches/suggest`.
 
 Every private route verifies a revocable PostgreSQL session from the HttpOnly cookie (the server retains bearer parsing for non-browser API clients). Staff/admin scope comes exclusively from an active staff or institution-admin membership checked on each institution-scoped endpoint; platform aggregates require explicit active platform-admin membership. Private user records are filtered by authenticated user ID. Staff queries and mutations scope records to the authorized institution. A case cannot be marked returned through the ordinary status endpoint: staff must first mark it matched, approve a claim for that case, record a separate verification tied to that exact claim approval, then record a one-time handover linked to the verified claim and staff account. Database row-security policies and triggers also reject handovers or returned statuses that do not have this current verification record. Claims can only be created against found-item listings. Errors use `{"error":{"code":"...","message":"..."}}`; private claims, contacts, evidence references, staff notes, and handover details never appear in public item DTOs.
+
+Platform administration additionally requires an active `platform_admins` row for each request. Institution, membership, administrator, and audit changes execute in a transaction with platform-admin RLS context and append a separate `platform_admin_events` record. The final active platform administrator cannot be revoked, including during concurrent requests. Bootstrap the first administrator through the protected migration/owner connection only after account verification; thereafter assign accounts in the Admin app.
 
 The Python matching service receives only reviewed public-safe summaries. AI matching remains disabled by default and never decides ownership or approves claims. CORS is restricted to `CORS_ALLOWED_ORIGINS` (default `http://localhost:3000`).
 

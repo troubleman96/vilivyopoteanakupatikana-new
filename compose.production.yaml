@@ -28,7 +28,7 @@ services:
     environment:
       DATABASE_URL: null
       DATABASE_URL_FILE: /run/secrets/runtime_database_url
-      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname},https://${INSTITUTION_HOSTNAME:?Set INSTITUTION_HOSTNAME},https://${ADMIN_HOSTNAME:?Set ADMIN_HOSTNAME}
       PUBLIC_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
       AI_SERVICE_TOKEN: null
       AI_SERVICE_TOKEN_FILE: /run/secrets/ai_service_token
@@ -44,20 +44,51 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}/api/v1
         NEXT_PUBLIC_DEMO_MODE: "false"
+        NEXT_PUBLIC_LANDING_URL: https://${LANDING_HOSTNAME:?Set LANDING_HOSTNAME to the approved marketing hostname}
+        NEXT_PUBLIC_INSTITUTION_APP_URL: https://${INSTITUTION_HOSTNAME:?Set INSTITUTION_HOSTNAME}
+        NEXT_PUBLIC_ADMIN_APP_URL: https://${ADMIN_HOSTNAME:?Set ADMIN_HOSTNAME}
     environment:
       NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}/api/v1
       NEXT_PUBLIC_DEMO_MODE: "false"
       NEXT_PUBLIC_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      NEXT_PUBLIC_INSTITUTION_APP_URL: https://${INSTITUTION_HOSTNAME:?Set INSTITUTION_HOSTNAME}
+      NEXT_PUBLIC_ADMIN_APP_URL: https://${ADMIN_HOSTNAME:?Set ADMIN_HOSTNAME}
+    ports: !reset []
+
+  landing:
+    build:
+      args:
+        NEXT_PUBLIC_PRODUCT_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved product hostname}
+    ports: !reset []
+
+  institution:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved product hostname}/api/v1
+        NEXT_PUBLIC_PRODUCT_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME}
+    ports: !reset []
+
+  admin:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved product hostname}/api/v1
+        NEXT_PUBLIC_PRODUCT_APP_URL: https://${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME}
     ports: !reset []
 
   edge:
     image: caddy:2.10-alpine
     environment:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?Set PUBLIC_HOSTNAME to the approved HTTPS hostname}
+      LANDING_HOSTNAME: ${LANDING_HOSTNAME:?Set LANDING_HOSTNAME to the approved marketing hostname}
+      INSTITUTION_HOSTNAME: ${INSTITUTION_HOSTNAME:?Set INSTITUTION_HOSTNAME}
+      ADMIN_HOSTNAME: ${ADMIN_HOSTNAME:?Set ADMIN_HOSTNAME}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
     depends_on:
       - api
       - web
+      - landing
+      - institution
+      - admin
     ports:
       - "80:80"
       - "443:443"

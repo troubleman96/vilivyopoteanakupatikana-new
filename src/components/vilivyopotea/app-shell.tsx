@@ -8,6 +8,8 @@ import { DemoNotice } from './primitives';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL ?? 'http://localhost:3001';
+
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <Link
@@ -20,7 +22,9 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       </span>
       {!compact && (
         <span className='leading-tight'>
-          <span className='block text-sm font-semibold tracking-tight'>Vilivyopotea</span>
+          <span className='block font-heading text-sm font-semibold tracking-tight'>
+            Vilivyopotea
+          </span>
           <span className='block text-[10px] text-muted-foreground'>na Kupatikana</span>
         </span>
       )}
@@ -46,8 +50,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className='mt-6 sm:mt-8'>{children}</div>
             </div>
             <footer className='border-t border-border px-4 py-3 text-center text-[10px] text-muted-foreground sm:px-6'>
-              Private details stay private · Staff verify ownership · AI suggestions never make
-              decisions
+              <span>
+                Private details stay private · Staff verify ownership · AI suggestions never make
+                decisions
+              </span>
+              <span className='mx-2' aria-hidden>
+                ·
+              </span>
+              <a className='font-semibold text-primary hover:underline' href={LANDING_URL}>
+                About the project
+              </a>
             </footer>
           </main>
         </SidebarInset>

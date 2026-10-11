@@ -151,6 +151,7 @@ func grantRuntimePrivileges(ctx context.Context, pool *pgxpool.Pool, role string
 	}
 	grants := []string{
 		`GRANT SELECT ON institutions, institution_memberships, platform_admins, public_items TO %I`,
+		`GRANT INSERT, UPDATE ON institutions, institution_memberships, platform_admins TO %I`,
 		`GRANT EXECUTE ON FUNCTION public.is_public_item(uuid) TO %I`,
 		`GRANT EXECUTE ON FUNCTION public.is_claimable_item(uuid) TO %I`,
 		`GRANT SELECT, INSERT, UPDATE ON app_users TO %I`,
@@ -161,8 +162,10 @@ func grantRuntimePrivileges(ctx context.Context, pool *pgxpool.Pool, role string
 		`GRANT SELECT, INSERT ON handovers TO %I`,
 		`GRANT SELECT, INSERT ON claim_verifications TO %I`,
 		`GRANT SELECT, INSERT ON operational_audit_events TO %I`,
+		`GRANT SELECT, INSERT ON platform_admin_events TO %I`,
 		`GRANT USAGE, SELECT ON SEQUENCE auth_email_outbox_id_seq TO %I`,
 		`GRANT USAGE, SELECT ON SEQUENCE operational_audit_events_id_seq TO %I`,
+		`GRANT USAGE, SELECT ON SEQUENCE platform_admin_events_id_seq TO %I`,
 	}
 	for _, grant := range grants {
 		var statement string
