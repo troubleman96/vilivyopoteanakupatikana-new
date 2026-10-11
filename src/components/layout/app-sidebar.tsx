@@ -36,6 +36,12 @@ import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { Icons } from '@/components/icons';
 import { useDemoRole, type DemoRole } from '@/components/vilivyopotea/role-context';
+import {
+  clearAccessToken,
+  fetchCurrentAccount,
+  getAccessToken,
+  signOutLocalAccount
+} from '@/lib/api';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -50,9 +56,34 @@ const roles: { id: DemoRole; label: string; description: string }[] = [
 export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [accountEmail, setAccountEmail] = React.useState<string | null>(null);
   const filteredGroups = useFilteredNavGroups(navGroups);
   const { role, setRole } = useDemoRole();
   const activeRole = roles.find((candidate) => candidate.id === role) ?? roles[1];
+
+  React.useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    void fetchCurrentAccount(token)
+      .then((account) => setAccountEmail(account.email))
+      .catch(() => {
+        clearAccessToken();
+        setAccountEmail(null);
+      });
+  }, []);
+
+  async function handleSignOut() {
+    const token = getAccessToken();
+    if (token) {
+      try {
+        await signOutLocalAccount(token);
+      } catch {
+        clearAccessToken();
+      }
+    }
+    setAccountEmail(null);
+    router.push('/auth/sign-in');
+  }
 
   return (
     <Sidebar collapsible='icon'>
@@ -196,8 +227,12 @@ export default function AppSidebar() {
                   AJ
                 </span>
                 <span className='min-w-0 truncate text-left group-data-[collapsible=icon]:hidden'>
-                  <span className='block text-xs font-medium'>Guest account</span>
-                  <span className='block text-[10px] text-muted-foreground'>Supabase sign-in</span>
+                  <span className='block truncate text-xs font-medium'>
+                    {accountEmail ?? 'Guest account'}
+                  </span>
+                  <span className='block text-[10px] text-muted-foreground'>
+                    Local PostgreSQL account
+                  </span>
                 </span>
                 <Icons.chevronsDown className='ml-auto size-4 group-data-[collapsible=icon]:hidden' />
               </DropdownMenuTrigger>
@@ -212,16 +247,23 @@ export default function AppSidebar() {
                     <div className='px-2 py-1.5'>
                       <p className='text-xs font-medium'>Your account</p>
                       <p className='text-[10px] text-muted-foreground'>
-                        Sign in to manage private reports.
+                        {accountEmail ?? 'Sign in to manage private reports.'}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/auth/sign-in')}>
-                  <Icons.login className='mr-2 size-4' />
-                  Sign in
-                </DropdownMenuItem>
+                {accountEmail ? (
+                  <DropdownMenuItem onClick={() => void handleSignOut()}>
+                    <Icons.login className='mr-2 size-4' />
+                    Sign out
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => router.push('/auth/sign-in')}>
+                    <Icons.login className='mr-2 size-4' />
+                    Sign in
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => router.push('/dashboard/account')}>
                   <Icons.account className='mr-2 size-4' />
                   My reports & claims

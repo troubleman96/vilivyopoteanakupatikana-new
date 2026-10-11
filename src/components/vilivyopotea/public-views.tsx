@@ -6,7 +6,7 @@ import { IconCheck, IconSearch } from '@tabler/icons-react';
 import { DemoNotice, ItemCard, PageHeading, StatusPill } from './primitives';
 import {
   fetchPublicInstitutions,
-  getSupabaseAccessToken,
+  getAccessToken,
   isApiConfigured,
   searchPublicItems,
   submitPrivateClaim,
@@ -157,9 +157,9 @@ export function PublicSearchView() {
     }
     setClaimBusy(true);
     try {
-      const token = await getSupabaseAccessToken();
+      const token = getAccessToken();
       if (!token) {
-        setClaimMessage('Sign in with a configured Supabase account to submit a private claim.');
+        setClaimMessage('Sign in with your local account to submit a private claim.');
         return;
       }
       await submitPrivateClaim(token, activeItem.id, claimStatement.trim());
@@ -455,7 +455,7 @@ export function PublicReportView() {
     }
     setBusy(true);
     try {
-      const token = await getSupabaseAccessToken();
+      const token = getAccessToken();
       if (!token) {
         setNeedsSignIn(true);
         return;
@@ -753,7 +753,7 @@ export function PublicReportView() {
               role='status'
               className='rounded-xl bg-secondary p-3 text-xs leading-5 text-secondary-foreground'
             >
-              Sign in with Supabase to send this report.{' '}
+              Sign in to your local account to send this report.{' '}
               <Link href='/auth/sign-in' className='font-semibold underline'>
                 Sign in
               </Link>{' '}

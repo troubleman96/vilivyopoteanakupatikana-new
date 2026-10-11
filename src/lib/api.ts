@@ -1,9 +1,11 @@
-import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { LostFoundItem } from '@/lib/demo-data';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
 
 type ApiEnvelope<T> = { data: T };
+
+export type LocalAuthUser = { id: string; email: string };
+export type LocalAuthSession = { access_token: string; expires_at: string; user: LocalAuthUser };
 
 type PublicApiItem = {
   id: string;
@@ -128,7 +130,10 @@ async function requestData<T>(
   path: string,
   options: { token?: string; method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}
 ): Promise<T> {
-  if (!API_BASE_URL) throw new Error('The Go API is not configured.');
+  if (!API_BASE_URL)
+    throw new Error(
+      'The Go API is not configured. Start the local PostgreSQL-backed application stack.'
+    );
   const headers = new Headers({ Accept: 'application/json' });
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
@@ -146,6 +151,45 @@ async function requestData<T>(
 
 export function isApiConfigured(): boolean {
   return API_BASE_URL.length > 0;
+}
+
+export async function registerLocalAccount(
+  email: string,
+  password: string
+): Promise<LocalAuthSession> {
+  return requestData('/auth/register', { method: 'POST', body: { email, password } });
+}
+
+export async function signInLocalAccount(
+  email: string,
+  password: string
+): Promise<LocalAuthSession> {
+  return requestData('/auth/login', { method: 'POST', body: { email, password } });
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.sessionStorage.getItem('vp-access-token');
+}
+
+export function saveAccessToken(token: string): void {
+  window.sessionStorage.setItem('vp-access-token', token);
+}
+
+export function clearAccessToken(): void {
+  if (typeof window !== 'undefined') window.sessionStorage.removeItem('vp-access-token');
+}
+
+export async function fetchCurrentAccount(token: string): Promise<LocalAuthUser> {
+  return requestData('/auth/me', { token });
+}
+
+export async function signOutLocalAccount(token: string): Promise<void> {
+  try {
+    await requestData('/auth/logout', { method: 'POST', token, body: {} });
+  } finally {
+    clearAccessToken();
+  }
 }
 
 export async function fetchPublicItems(): Promise<PublicApiItem[]> {
@@ -253,14 +297,6 @@ export function toListingCard(item: PublicApiItem): LostFoundItem {
   };
 }
 
-export async function getSupabaseAccessToken(): Promise<string | null> {
-  const client = createSupabaseClient();
-  if (!client) return null;
-  const { data, error } = await client.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token ?? null;
-}
-
 export async function submitReport(
   token: string,
   input: CreateReportInput
@@ -312,7 +348,7 @@ export async function reviewStaffClaim(
   institutionId: string,
   claimId: string,
   status: string,
-  staffNote = ''
+  staffNote: string
 ): Promise<{ status: string }> {
   return requestData(
     `/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/review`,
@@ -337,6 +373,21 @@ export async function reviewStaffItem(
   );
 }
 
+export async function suggestStaffMatches(
+  token: string,
+  institutionId: string,
+  itemId: string
+): Promise<MatchSuggestionResponse> {
+  const data = await requestData<unknown>(
+    `/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`,
+    { method: 'POST', token, body: { item_id: itemId } }
+  );
+  if (!isRecord(data) || !Array.isArray(data.suggestions)) {
+    throw new Error('The API returned an invalid match suggestion response.');
+  }
+  return data as unknown as MatchSuggestionResponse;
+}
+
 export async function fetchInstitutionStats(
   token: string,
   institutionId: string
@@ -346,16 +397,4 @@ export async function fetchInstitutionStats(
 
 export async function fetchPlatformStats(token: string): Promise<PlatformStats> {
   return requestData('/platform/stats', { token });
-}
-
-export async function suggestStaffMatches(
-  token: string,
-  institutionId: string,
-  itemId: string
-): Promise<MatchSuggestionResponse> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`, {
-    method: 'POST',
-    token,
-    body: { item_id: itemId }
-  });
 }

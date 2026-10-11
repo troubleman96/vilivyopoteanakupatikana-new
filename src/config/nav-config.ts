@@ -1,7 +1,7 @@
 import { NavGroup } from '@/types';
 
 /** Shared route map for the Kiranism sidebar and Cmd+K palette. Role labels are
- * preview-only; API authorization is always enforced by Supabase-backed checks. */
+ * preview-only; API authorization is always enforced by PostgreSQL-backed sessions and membership checks. */
 export const navGroups: NavGroup[] = [
   {
     label: 'Discover',

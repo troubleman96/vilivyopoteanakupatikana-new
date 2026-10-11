@@ -6,7 +6,7 @@ import { DemoNotice, PageHeading, StatusPill } from './primitives';
 import {
   fetchPublicInstitutions,
   fetchStaffCases,
-  getSupabaseAccessToken,
+  getAccessToken,
   reviewStaffItem,
   suggestStaffMatches,
   type MatchSuggestionResponse,
@@ -46,7 +46,7 @@ export function StaffCaseQueue() {
     let active = true;
     async function initialize() {
       try {
-        const token = await getSupabaseAccessToken();
+        const token = getAccessToken();
         if (!active) return;
         if (!token) {
           setAuthRequired(true);
@@ -121,7 +121,7 @@ export function StaffCaseQueue() {
     setReviewingId(item.item_id);
     setReviewMessage((current) => ({ ...current, [item.item_id]: '' }));
     try {
-      const token = await getSupabaseAccessToken();
+      const token = getAccessToken();
       if (!token) {
         setAuthRequired(true);
         return;
@@ -165,7 +165,7 @@ export function StaffCaseQueue() {
   async function handleSuggest(item: StaffCase) {
     setMatches((current) => ({ ...current, [item.item_id]: { loading: true } }));
     try {
-      const token = await getSupabaseAccessToken();
+      const token = getAccessToken();
       if (!token) {
         setAuthRequired(true);
         setMatches((current) => ({

@@ -15,12 +15,12 @@ A Tanzania lost-and-found platform foundation in one repository: a responsive Ne
 | Go API | `services/api/` | Modular-monolith API, authentication checks, institution scoping, PostgreSQL migrations, and OpenAPI-ready routes. |
 | Python AI service | `services/ai/` | Private matching-suggestion ranker with optional local EmbeddingGemma 2 semantic matching and a deterministic fallback. |
 
-The role areas and developer portal are routes in one Next.js app to preserve the shared Kiranism shell and design system. They are user experiences, not separate trust domains. Supabase identity, institution membership, platform-admin access, and private data scopes are checked server-side.
+The role areas and developer portal are routes in one Next.js app to preserve the shared Kiranism shell and design system. They are user experiences, not separate trust domains. Local PostgreSQL accounts, institution membership, platform-admin access, and private data scopes are checked server-side.
 
 ## Product and safety boundary
 
 - Public search returns reviewed, redacted listings only. Claims, contact details, staff notes, evidence, and handover details are private.
-- Supabase Auth is the default identity provider. No Supabase project credentials or real-user data are included.
+- Local account authentication uses PostgreSQL, bcrypt password hashes, and revocable 30-day opaque sessions. No third-party identity service is required.
 - Staff verify claims and coordinate returns. AI only ranks possible matches; it cannot decide ownership, approve or reject claims, or reveal withheld evidence.
 - EmbeddingGemma 2 is integrated as an optional, local-only text ranker. It loads only from a mounted/configured checkpoint, applies the model's retrieval query/document prompts, and does not persist vectors or use a vector database. The app-level matching feature flag remains off by default; AI suggestions never verify ownership or decide claims.
 - All records and institution names are synthetic. DIT is a proposed pilot only; it has not approved a pilot and is not represented as a partner.
@@ -38,7 +38,7 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The public site, synthetic workspaces, and `/docs` run without credentials. Sign-in and registration show a setup state until Supabase is configured. The UI uses a fixed Supabase palette and Outfit font; light or dark mode follows the operating system automatically, with no in-app appearance controls. Demo role switching is only for preview; it never grants real permissions.
+Open <http://localhost:3000>. The public site, synthetic workspaces, and `/docs` run without account credentials. Sign-in and registration require the local Go API and PostgreSQL stack. The UI uses a fixed lagoon palette and Outfit font; light or dark mode follows the operating system automatically, with no in-app appearance controls. Demo role switching is only for preview; it never grants real permissions.
 
 ## Run the local stack
 
@@ -61,16 +61,7 @@ docker compose --profile mcp up --build mcp
 
 For an MCP client on your computer, use the local stdio transport instead (see [FastMCP docs](/docs/mcp)).
 
-Without Supabase settings, public demo reads can use synthetic API fixtures and private operations fail closed. To enable Supabase Auth, configure both browser and server values in `.env`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-```
-
-Use only the anon/public key. Never place a service-role key in `NEXT_PUBLIC_*` or commit credentials. The Go API validates bearer access tokens against Supabase Auth; it does not issue a fake identity.
+The full local stack uses the PostgreSQL credentials in `.env` and requires no external auth settings. Private API operations fail closed when PostgreSQL is unavailable. The web-only `pnpm dev` command can still display fictional UI preview data, but cannot create or sign in to accounts without the API/database.
 
 ## Development and tests
 
@@ -78,6 +69,7 @@ Use only the anon/public key. Never place a service-role key in `NEXT_PUBLIC_*` 
 make setup          # web dependencies, AI test extras, FastMCP test extras
 pnpm dev             # web + documentation site
 make api-test        # Go API tests
+TEST_DATABASE_URL=postgres://.../vilivyopotea_test make api-test-50  # 50-account PostgreSQL integration suite
 make ai-test         # Python AI service tests
 make mcp-test        # FastMCP safety/projection tests
 make test            # web checks + Go tests + AI and MCP tests

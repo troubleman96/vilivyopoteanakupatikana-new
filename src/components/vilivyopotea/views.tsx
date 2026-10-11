@@ -916,8 +916,8 @@ export function AccountView() {
         </SectionCard>
         <SectionCard title='Sign-in security'>
           <p className='text-[11px] leading-5 text-muted-foreground'>
-            Account authentication is designed to use Supabase Auth when project variables are
-            configured.
+            Account authentication uses local PostgreSQL accounts through the Go API. Passwords are
+            hashed and sessions expire automatically.
           </p>
           <Link
             href='/auth/sign-in'

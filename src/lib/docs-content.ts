@@ -32,7 +32,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'What lives here',
         paragraphs: [
-          'The user-facing areas are routes in one Next.js application. This keeps identity, design tokens, the fixed Supabase palette, Outfit typeface, and Kiranism dashboard shell consistent while keeping each role’s navigation and duties distinct.',
+          'The user-facing areas are routes in one Next.js application. This keeps identity, design tokens, the fixed Lagoon palette, Outfit typeface, and Kiranism dashboard shell consistent while keeping each role’s navigation and duties distinct.',
           'The Go API and Python AI service remain first-class services. The optional FastMCP adapter is separate from the API and calls only its public, read-only endpoints.'
         ],
         bullets: [
@@ -49,7 +49,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Request and trust boundaries',
         paragraphs: [
-          'Web pages use the API for product data. Supabase Auth identifies signed-in users; institution membership and platform-admin membership are enforced by the API and database, not by the browser’s preview-role selector.',
+          'Web pages use the API for product data. Local PostgreSQL accounts identify signed-in users; institution membership and platform-admin membership are enforced by the API and database, not by the browser’s preview-role selector.',
           'The AI ranker is a private, optional assistive service called through the Go API. It is not an identity check or decision-maker. The MCP adapter intentionally has no access to private case, claim, or administrative routes.'
         ],
         code: 'Browser → Next.js web app → Go API → PostgreSQL\n                                      └→ private Python ranker (optional)\nMCP client → FastMCP (read-only) → public Go API routes'
@@ -84,14 +84,14 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Authenticated user routes',
         paragraphs: [
-          'Send a Supabase access token as a bearer token. Private routes fail closed when authentication or the database is unavailable.'
+          'Send a local PostgreSQL account access token as a bearer token. Private routes fail closed when authentication or the database is unavailable.'
         ],
         bullets: [
           'POST /api/v1/reports — submit a private report for staff review.',
           'GET /api/v1/me/reports — read the signed-in user’s own reports.',
           'POST /api/v1/me/claims and GET /api/v1/me/claims — create or read the signed-in user’s own claims.'
         ],
-        code: 'Authorization: Bearer <supabase-access-token>\nContent-Type: application/json'
+        code: 'Authorization: Bearer <local-access-token>\nContent-Type: application/json'
       },
       {
         title: 'Institution staff and system admin',
@@ -181,7 +181,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'Documentation site — /docs and /docs/{architecture,api,ai-and-embeddings,nextjs,mcp,security}.'
         ],
         paragraphs: [
-          'The dashboard keeps the existing Kiranism shell, fixed Supabase palette, Outfit font, and role-preview selector. The selector is for fictional demo exploration only; it is not an authentication or access-control mechanism.'
+          'The dashboard keeps the existing Kiranism shell, fixed Lagoon palette, Outfit font, and role-preview selector. The selector is for fictional demo exploration only; it is not an authentication or access-control mechanism.'
         ]
       },
       {
@@ -191,7 +191,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
           'Keep feature data behind service/query layers and send product operations through the Go API.',
           'Use the shared design tokens and components rather than creating a parallel theme.',
           'Keep public item projections redacted and avoid storing private claims or contact details in browser demo state.',
-          'Preserve the fixed typeface, fixed Supabase palette, and Kiranism dashboard shell when extending the UI.'
+          'Preserve the fixed typeface, fixed Lagoon palette, and Kiranism dashboard shell when extending the UI.'
         ],
         code: 'src/app/                 Next.js App Router routes\nsrc/components/vilivyopotea/  product views and documentation shell\nsrc/features/             reusable feature modules\nsrc/lib/                  API clients, demo data, and docs content'
       },
@@ -244,11 +244,11 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Identity and authorization',
         bullets: [
-          'Supabase Auth validates bearer access tokens; the client uses only public/anon configuration.',
+          'PostgreSQL-backed local authentication validates opaque bearer sessions; only token digests are stored.',
           'Institution staff routes check active membership for the specific institution on each request.',
           'System-wide aggregates require explicit active platform-admin membership.',
           'Private user routes are scoped to the authenticated identity.',
-          'Supabase credentials remain unconfigured in this project; private operations fail closed until a real environment is configured.'
+          'Local accounts require the Go API and PostgreSQL; private operations fail closed when either is unavailable.'
         ]
       },
       {

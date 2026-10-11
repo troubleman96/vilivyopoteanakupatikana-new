@@ -3,15 +3,17 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/api"
-	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/auth"
-	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/config"
-	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/store"
 	"log"
 	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/api"
+	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/auth"
+	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/config"
+	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/store"
 )
 
 func main() {
@@ -28,7 +30,11 @@ func main() {
 			defer db.Pool.Close()
 		}
 	}
-	h := api.New(db, auth.Validator{URL: c.SupabaseURL, AnonKey: c.SupabaseAnonKey, Client: &http.Client{Timeout: c.AuthTimeout}}, c.DemoReads, c.AIServiceURL)
+	var authPool *pgxpool.Pool
+	if db != nil {
+		authPool = db.Pool
+	}
+	h := api.New(db, auth.Validator{Pool: authPool}, c.DemoReads, c.AIServiceURL)
 	h.AIToken = c.AIServiceToken
 	h.AIMatchingEnabled = c.AIMatchingEnabled
 	h.CORSAllowedOrigins = c.CORSAllowedOrigins

@@ -6,7 +6,7 @@ This is a Next.js 16 + shadcn/ui admin dashboard starter kit.
 
 - **[AGENTS.md](./AGENTS.md)** — Full project overview, tech stack, structure, conventions, data fetching patterns, deployment
 - **[docs/forms.md](./docs/forms.md)** — Form system: TanStack Form + Zod, composable fields, validation, multi-step, sheet/dialog forms
-- **[docs/themes.md](./docs/themes.md)** — Fixed Supabase palette: OKLCH tokens, Outfit, system color mode
+- **[docs/themes.md](./docs/themes.md)** — Fixed Lagoon palette: OKLCH tokens, Outfit, system color mode
 - **[docs/deployment.md](./docs/deployment.md)** — Deployment: Vercel, production environment variables, Docker
 
 ## Critical Conventions

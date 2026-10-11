@@ -2,7 +2,6 @@
   "name": "vilivyopoteanakupatikana-new",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@11.25.0",
   "author": {
     "name": "Kiran",
     "url": "https://github.com/Kiranism"
@@ -29,8 +28,6 @@
     "@sentry/nextjs": "^10.45.0",
     "@shadcn/helpers": "^0.1.0",
     "@shadcn/react": "^0.2.1",
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.3",
     "@tabler/icons-react": "^3.40.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@tanstack/react-form": "^1.28.5",
@@ -94,5 +91,6 @@
     "!(scripts)/**/*.{js,jsx,tsx,ts,css,less,scss,sass}": [
       "oxfmt --write"
     ]
-  }
+  },
+  "packageManager": "pnpm@11.25.0"
 }

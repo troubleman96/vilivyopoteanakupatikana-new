@@ -6,7 +6,7 @@
 //
 // Pick your pattern and replace the function bodies below:
 //
-// 1. Server Actions + ORM (Prisma / Drizzle / Supabase)
+// 1. Server Actions + ORM (Prisma / Drizzle / PostgreSQL)
 //    → Add 'use server' at the top of this file
 //    → Call your ORM directly in each function
 //

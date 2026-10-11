@@ -83,6 +83,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { write(w, 200, envelope{"status": "ok"}) })
 	s.mux.HandleFunc("GET /readyz", s.ready)
+	s.mux.HandleFunc("POST /api/v1/auth/register", s.registerAccount)
+	s.mux.HandleFunc("POST /api/v1/auth/login", s.signIn)
+	s.mux.HandleFunc("POST /api/v1/auth/logout", s.signOut)
+	s.mux.HandleFunc("GET /api/v1/auth/me", s.currentAccount)
 	s.mux.HandleFunc("GET /api/v1/institutions", s.listInstitutions)
 	s.mux.HandleFunc("GET /api/v1/institutions/{institutionID}", s.getInstitution)
 	s.mux.HandleFunc("GET /api/v1/items", s.listItems)
@@ -570,8 +574,8 @@ func (s *Server) updateCase(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Status string `json:"status"`
 	}
-	if body(r, &b) != nil || !oneOf(b.Status, "open", "under_review", "matched", "returned", "closed") {
-		fail(w, 400, "invalid_request", "status must be open, under_review, matched, returned, or closed")
+	if body(r, &b) != nil || !oneOf(b.Status, "open", "under_review", "matched", "closed") {
+		fail(w, 400, "invalid_request", "status must be open, under_review, matched, or closed; use the verified handover endpoint to record a return")
 		return
 	}
 	tag, e := s.DB.Pool.Exec(r.Context(), `UPDATE cases SET status=$1,updated_at=now() WHERE id::text=$2 AND institution_id::text=$3`, b.Status, r.PathValue("caseID"), r.PathValue("institutionID"))
@@ -609,16 +613,18 @@ func (s *Server) reviewClaim(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, envelope{"data": map[string]string{"status": b.Status}})
 }
 func (s *Server) handover(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.staff(w, r); !ok {
+	u, ok := s.staff(w, r)
+	if !ok {
 		return
 	}
 	var b struct {
+		ClaimID    string `json:"claim_id"`
 		HandoverAt string `json:"handover_at"`
 		Details    string `json:"details"`
 		Recipient  string `json:"recipient"`
 	}
-	if body(r, &b) != nil || b.HandoverAt == "" {
-		fail(w, 400, "invalid_request", "handover_at is required")
+	if body(r, &b) != nil || b.HandoverAt == "" || b.ClaimID == "" {
+		fail(w, 400, "invalid_request", "claim_id and handover_at are required")
 		return
 	}
 	tx, e := s.DB.Pool.Begin(r.Context())
@@ -627,16 +633,46 @@ func (s *Server) handover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
-	tag, e := tx.Exec(r.Context(), `INSERT INTO handovers(case_id,institution_id,handover_at,details,recipient) SELECT id,institution_id,$1::timestamptz,$2,$3 FROM cases WHERE id::text=$4 AND institution_id::text=$5`, b.HandoverAt, b.Details, b.Recipient, r.PathValue("caseID"), r.PathValue("institutionID"))
-	if e != nil {
-		fail(w, 400, "invalid_handover", "case or handover data invalid")
-		return
-	}
-	if tag.RowsAffected() == 0 {
+	var itemID, caseStatus string
+	e = tx.QueryRow(r.Context(), `SELECT item_id::text,status FROM cases WHERE id::text=$1 AND institution_id::text=$2 FOR UPDATE`, r.PathValue("caseID"), r.PathValue("institutionID")).Scan(&itemID, &caseStatus)
+	if errors.Is(e, pgx.ErrNoRows) {
 		fail(w, 404, "not_found", "case not found")
 		return
 	}
-	tag, e = tx.Exec(r.Context(), `UPDATE cases SET status='returned',updated_at=now() WHERE id::text=$1 AND institution_id::text=$2`, r.PathValue("caseID"), r.PathValue("institutionID"))
+	if e != nil {
+		dbfail(w)
+		return
+	}
+	if caseStatus != "matched" {
+		fail(w, 409, "handover_not_ready", "the case must be matched before a handover can be recorded")
+		return
+	}
+	var claimApproved bool
+	e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM claims WHERE id::text=$1 AND item_id::text=$2 AND status='approved')`, b.ClaimID, itemID).Scan(&claimApproved)
+	if e != nil {
+		dbfail(w)
+		return
+	}
+	if !claimApproved {
+		fail(w, 409, "handover_not_verified", "a staff-approved claim for this case is required before handover")
+		return
+	}
+	var alreadyRecorded bool
+	e = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM handovers WHERE case_id::text=$1)`, r.PathValue("caseID")).Scan(&alreadyRecorded)
+	if e != nil {
+		dbfail(w)
+		return
+	}
+	if alreadyRecorded {
+		fail(w, 409, "handover_already_recorded", "this case already has a recorded handover")
+		return
+	}
+	_, e = tx.Exec(r.Context(), `INSERT INTO handovers(case_id,institution_id,claim_id,recorded_by,handover_at,details,recipient) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::timestamptz,$6,$7)`, r.PathValue("caseID"), r.PathValue("institutionID"), b.ClaimID, u.ID, b.HandoverAt, b.Details, b.Recipient)
+	if e != nil {
+		dbfail(w)
+		return
+	}
+	tag, e := tx.Exec(r.Context(), `UPDATE cases SET status='returned',updated_at=now() WHERE id::text=$1 AND institution_id::text=$2`, r.PathValue("caseID"), r.PathValue("institutionID"))
 	if e != nil || tag.RowsAffected() == 0 {
 		dbfail(w)
 		return

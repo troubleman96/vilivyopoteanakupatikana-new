@@ -1,5 +1,5 @@
-/* The Supabase palette is fixed; color mode follows the operating system. */
-@import './themes/supabase.css';
+/* The Lagoon palette is fixed; color mode follows the operating system. */
+@import './themes/lagoon.css';
 
 body {
   @apply overscroll-none;

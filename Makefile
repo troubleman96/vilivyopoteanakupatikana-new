@@ -1,4 +1,4 @@
-.PHONY: setup web-dev web-typecheck web-build web-lint api-run api-test ai-setup ai-test mcp-setup mcp-run mcp-test test up down
+.PHONY: setup web-dev web-typecheck web-build web-lint api-run api-test api-test-50 ai-setup ai-test mcp-setup mcp-run mcp-test test up down
 
 setup:
 	pnpm install --ignore-scripts
@@ -21,6 +21,10 @@ api-run:
 
 api-test:
 	cd services/api && go test ./...
+
+api-test-50:
+	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to a dedicated local database whose name contains _test" >&2; exit 1)
+	@cd services/api && TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIsolation$$' -count=1 -v
 
 ai-setup:
 	python3 -m pip install -e 'services/ai[test]'

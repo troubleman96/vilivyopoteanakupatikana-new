@@ -17,7 +17,7 @@ This file provides essential information for AI coding agents working on this pr
 - **Containerization**: Docker (Node.js & Bun Dockerfiles)
 - **Package Manager**: pnpm 11 (see `packageManager` in `package.json`)
 
-The monorepo contains one Next.js app with a public landing page, individual user routes, institution/security-staff routes, a system-admin preview, and a `/docs` developer site; the Go API in `services/api/`; the private Python matching service in `services/ai/`; and a read-only FastMCP adapter in `services/mcp/`. Use fictional demo data only; do not imply that any university has approved a pilot. Supabase identity and API/database checks—not the demo role selector—enforce authorization. The AI service supports a configured local EmbeddingGemma 2 checkpoint or a deterministic fallback; the Go API matching feature remains disabled by default.
+The monorepo contains one Next.js app with a public landing page, individual user routes, institution/security-staff routes, a system-admin preview, and a `/docs` developer site; the Go API in `services/api/`; the private Python matching service in `services/ai/`; and a read-only FastMCP adapter in `services/mcp/`. Use fictional demo data only; do not imply that any university has approved a pilot. Local PostgreSQL identity and API/database checks—not the demo role selector—enforce authorization. The AI service supports a configured local EmbeddingGemma 2 checkpoint or a deterministic fallback; the Go API matching feature remains disabled by default.
 
 ---
 
@@ -119,7 +119,7 @@ pnpm prepare         # Install Husky hooks
 
 ## Environment Configuration
 
-Copy `.env.example` to `.env` for the full Compose stack, or to `.env.local` for Next.js-only development. Never commit local `.env` files; keep Supabase keys blank to use the synthetic demo.
+Copy `.env.example` to `.env` for the full Compose stack, or to `.env.local` for Next.js-only development. Never commit local `.env` files; use only local PostgreSQL configuration; no hosted identity keys are needed.
 
 ### Optional for Error Tracking (Sentry)
 
@@ -173,7 +173,7 @@ NEXT_PUBLIC_SENTRY_DISABLED="false"  # Set to "true" to disable in dev
 
 ## Appearance
 
-The UI uses the fixed `supabase` palette and Outfit font. Its light/dark color mode follows the operating system; there are no in-app palette or mode selectors, appearance route, or theme-switching keyboard actions. The palette is loaded from `src/styles/themes/supabase.css` via `src/styles/theme.css`, with `DEFAULT_THEME` in `src/components/themes/theme.config.ts` set to `supabase`.
+The UI uses the fixed `lagoon` palette and Outfit font. Its light/dark color mode follows the operating system; there are no in-app palette or mode selectors, appearance route, or theme-switching keyboard actions. The palette is loaded from `src/styles/themes/lagoon.css` via `src/styles/theme.css`, with `DEFAULT_THEME` in `src/components/themes/theme.config.ts` set to `lagoon`.
 
 ---
 
@@ -230,7 +230,7 @@ src/features/<name>/api/
 
 | Pattern                                            | How to implement                                                                            |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Server Actions + ORM** (Prisma/Drizzle/Supabase) | Add `'use server'` at top of `service.ts`, call ORM directly                                |
+| **Server Actions + ORM** (Prisma/Drizzle/PostgreSQL) | Add `'use server'` at top of `service.ts`, call ORM directly                                |
 | **Route Handlers + ORM**                           | `service.ts` calls `/api/` routes via `apiClient`, route handlers call ORM                  |
 | **BFF** (Next.js proxies to Laravel/Go/etc.)       | `service.ts` calls `/api/` routes via `apiClient`, route handlers proxy to external backend |
 | **Direct external API** (frontend-only)            | `service.ts` calls external URL via `fetch()`                                               |
@@ -530,7 +530,7 @@ npx shadcn add component-name
 
 ### Fixed Appearance
 
-The app uses one fixed Supabase palette. See the Appearance section above and `docs/themes.md` for its source of truth.
+The app uses one fixed Lagoon palette. See the Appearance section above and `docs/themes.md` for its source of truth.
 
 ---
 
