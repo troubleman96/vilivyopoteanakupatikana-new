@@ -42,9 +42,9 @@ import * as React from 'react';
 
 const roles: { id: DemoRole; label: string; description: string }[] = [
   { id: 'individual', label: 'Individual', description: 'Personal reports and claims' },
-  { id: 'staff', label: 'Staff reviewer', description: 'University casework' },
+  { id: 'staff', label: 'Security / staff reviewer', description: 'Institution cases and returns' },
   { id: 'institution', label: 'Institution admin', description: 'One synthetic institution' },
-  { id: 'platform', label: 'Platform owner', description: 'Cross-institution aggregates' }
+  { id: 'platform', label: 'System admin', description: 'Cross-institution aggregate preview' }
 ];
 
 export default function AppSidebar() {

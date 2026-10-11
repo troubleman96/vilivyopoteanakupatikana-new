@@ -36,6 +36,26 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  mcp:
+    profiles: ["mcp"]
+    build:
+      context: ./services/mcp
+    environment:
+      VILIVY_API_BASE_URL: http://api:8080/api/v1
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8100"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
   migrate:
     build:
       context: ./services/api

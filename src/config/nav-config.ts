@@ -42,7 +42,7 @@ export const navGroups: NavGroup[] = [
     ]
   },
   {
-    label: 'University operations',
+    label: 'Institution & security operations',
     items: [
       {
         title: 'Case queue',
@@ -68,10 +68,10 @@ export const navGroups: NavGroup[] = [
     ]
   },
   {
-    label: 'Platform',
+    label: 'System administration',
     items: [
       {
-        title: 'Platform overview',
+        title: 'System admin overview',
         url: '/dashboard/platform',
         icon: 'laptop',
         shortcut: ['p', 'o'],

@@ -6,7 +6,7 @@ This file provides essential information for AI coding agents working on this pr
 
 ## Project Overview
 
-**Next.js Admin Dashboard Starter** is a production-ready admin dashboard template built with:
+**Vilivyopotea na Kupatikana** is a Tanzania lost-and-found platform foundation. The original dashboard starter remains attributed below; product work must follow this repository's product scope and safety boundaries.
 
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript 5.7
@@ -17,7 +17,7 @@ This file provides essential information for AI coding agents working on this pr
 - **Containerization**: Docker (Node.js & Bun Dockerfiles)
 - **Package Manager**: pnpm 11 (see `packageManager` in `package.json`)
 
-The product is a university lost-and-found platform in one monorepo: the Next.js UI lives in `src/`, the Go API in `services/api/`, and the Python matching service in `services/ai/`. Use fictional demo data only; do not imply that any university has approved a pilot.
+The monorepo contains one Next.js app with a public landing page, individual user routes, institution/security-staff routes, a system-admin preview, and a `/docs` developer site; the Go API in `services/api/`; the private Python matching service in `services/ai/`; and a read-only FastMCP adapter in `services/mcp/`. Use fictional demo data only; do not imply that any university has approved a pilot. Supabase identity and API/database checks—not the demo role selector—enforce authorization. The AI ranker is a lexical heuristic today; embeddings and EmbeddingGemma are not active.
 
 ---
 
@@ -72,81 +72,15 @@ The product is a university lost-and-found platform in one monorepo: the Next.js
 ## Project Structure
 
 ```
-/src
-├── app/                    # Next.js App Router
-│   ├── dashboard/         # Dashboard routes
-│   │   ├── overview/      # Parallel routes (@area_stats, @bar_stats, etc.)
-│   │   ├── product/       # Product management pages
-│   │   ├── kanban/        # Kanban board page
-│   │   ├── chat/          # Messaging page
-│   │   ├── ai-chat/       # AI chat streaming demo
-│   │   ├── notifications/ # Notifications page
-│   ├── api/               # API routes (if any)
-│   ├── layout.tsx         # Root layout with providers
-│   ├── page.tsx           # Landing page
-│   ├── global-error.tsx   # Global error boundary
-│   └── not-found.tsx      # 404 page
-│
-├── components/
-│   ├── ui/                # shadcn/ui components (50+ components)
-│   ├── layout/            # Layout components (sidebar, header, etc.)
-│   ├── forms/             # Field components (shadcn TanStack Form anatomy) + demos
-│   ├── themes/            # Theme system components
-│   ├── kbar/              # Command+K search bar
-│   ├── icons.tsx          # Icon registry
-│   └── ...
-│
-├── features/              # Feature-based modules
-│   ├── overview/          # Dashboard analytics
-│   ├── products/          # Product management (React Query + nuqs)
-│   │   ├── api/
-│   │   │   ├── types.ts   # Type contract (response shapes, filters, payloads)
-│   │   │   ├── service.ts # Data access layer (swap for your backend)
-│   │   │   └── queries.ts # React Query options + key factories
-│   │   ├── components/    # Listing, form, table components
-│   │   ├── schemas/       # Zod schemas
-│   │   └── constants/     # Filter options
-│   ├── users/             # User management (React Query + nuqs)
-│   │   ├── api/           # Same pattern: types.ts → service.ts → queries.ts
-│   │   └── components/    # Listing, table components
-│   ├── react-query-demo/  # React Query showcase (Pokemon API)
-│   ├── kanban/            # Kanban board with dnd-kit
-│   ├── chat/              # Messaging UI (conversations, bubbles, composer)
-│   ├── ai-chat/           # Scripted useChat streaming demo
-│   ├── notifications/     # Notification center & store
-│
-├── config/                # Configuration files
-│   ├── nav-config.ts      # Navigation with RBAC
-│   └── ...
-│
-├── hooks/                 # Custom React hooks
-│   ├── use-nav.ts         # RBAC navigation filtering
-│   ├── use-data-table.ts  # Data table state
-│   └── ...
-│
-├── lib/                   # Utility functions
-│   ├── utils.ts           # cn() and formatters
-│   ├── searchparams.ts    # Search param utilities
-│   └── ...
-│
-├── types/                 # TypeScript type definitions
-│   └── index.ts           # Core types (NavItem, etc.)
-│
-└── styles/                # Global styles
-    ├── globals.css        # Tailwind imports + view transitions
-    ├── theme.css          # Theme imports
-    └── themes/            # Individual theme files
-
-/docs                      # Documentation
-│   └── themes.md          # Theme customization guide
-
-/scripts                   # Dev tooling
-    ├── cleanup.js         # Feature removal, run via `bun run cleanup` (templates in cleanup-templates/, typechecked)
-    └── cleanup-templates/ # Replacement files cleanup.js copies into the repo
-
-Dockerfile                 # Node.js production Dockerfile
-Dockerfile.bun             # Bun production Dockerfile
-.dockerignore              # Docker build exclusions
+src/app/                         # Next.js App Router: / landing, /dashboard role areas, /docs developer site
+src/components/vilivyopotea/     # Product views and the docs site shell
+src/lib/docs-content.ts          # Source content for statically generated /docs/* pages
+services/api/                    # Go API, auth, tenant scoping, migrations, tests
+services/ai/                     # Private Python matching-suggestion service and tests
+services/mcp/                    # Read-only FastMCP adapter, isolated Python deps, tests, Dockerfile
+docs/                            # Deployment and contributor/product notes
+compose.yaml                     # Database, Go API, private AI, web, optional internal MCP profile
+Makefile                         # Setup, build, and test commands
 ```
 
 ---

@@ -1,8 +1,8 @@
-.PHONY: setup web-dev web-typecheck web-build web-lint api-run api-test ai-setup ai-test test up down
+.PHONY: setup web-dev web-typecheck web-build web-lint api-run api-test ai-setup ai-test mcp-setup mcp-run mcp-test test up down
 
 setup:
 	pnpm install --ignore-scripts
-	python3 -m pip install -e 'services/ai[test]'
+	python3 -m pip install -e 'services/ai[test]' -e 'services/mcp[test]'
 
 web-dev:
 	pnpm dev
@@ -28,7 +28,16 @@ ai-setup:
 ai-test:
 	cd services/ai && python3 -m pytest -q
 
-test: web-typecheck web-lint api-test ai-test
+mcp-setup:
+	python3 -m pip install -e 'services/mcp[test]'
+
+mcp-run:
+	cd services/mcp && python3 server.py
+
+mcp-test:
+	cd services/mcp && python3 -m pytest -q
+
+test: web-typecheck web-lint api-test ai-test mcp-test
 
 up:
 	docker compose up --build
