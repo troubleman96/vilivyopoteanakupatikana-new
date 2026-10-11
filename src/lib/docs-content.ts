@@ -84,14 +84,14 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Authenticated user routes',
         paragraphs: [
-          'Send a local PostgreSQL account access token as a bearer token. Private routes fail closed when authentication or the database is unavailable.'
+          'Browser sessions use the Secure, HttpOnly PostgreSQL session cookie set at sign-in; include credentials and never copy session values into JavaScript storage. Private routes fail closed when authentication or the database is unavailable.'
         ],
         bullets: [
           'POST /api/v1/reports — submit a private report for staff review.',
           'GET /api/v1/me/reports — read the signed-in user’s own reports.',
           'POST /api/v1/me/claims and GET /api/v1/me/claims — create or read the signed-in user’s own claims.'
         ],
-        code: 'Authorization: Bearer <local-access-token>\nContent-Type: application/json'
+        code: "fetch('http://localhost:8080/api/v1/me/reports', { credentials: 'include' })"
       },
       {
         title: 'Institution staff and system admin',
@@ -111,7 +111,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Response and safety conventions',
         paragraphs: [
-          'Successful responses wrap values in a data object. Errors use {"error":{"code":"...","message":"..."}}. Keep request bodies, bearer tokens, contact details, claims, withheld clues, and evidence references out of logs and public descriptions.'
+          'Successful responses wrap values in a data object. Errors use {"error":{"code":"...","message":"..."}}. Keep request bodies, session cookies or bearer tokens, contact details, claims, withheld clues, and evidence references out of logs and public descriptions.'
         ],
         links: [
           {

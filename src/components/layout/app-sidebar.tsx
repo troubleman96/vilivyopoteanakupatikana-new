@@ -36,12 +36,7 @@ import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { Icons } from '@/components/icons';
 import { useDemoRole, type DemoRole } from '@/components/vilivyopotea/role-context';
-import {
-  clearAccessToken,
-  fetchCurrentAccount,
-  getAccessToken,
-  signOutLocalAccount
-} from '@/lib/api';
+import { fetchCurrentAccount, signOutEverywhere, signOutLocalAccount } from '@/lib/api';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -57,32 +52,43 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [accountEmail, setAccountEmail] = React.useState<string | null>(null);
+  const [accountNotice, setAccountNotice] = React.useState('');
   const filteredGroups = useFilteredNavGroups(navGroups);
   const { role, setRole } = useDemoRole();
   const activeRole = roles.find((candidate) => candidate.id === role) ?? roles[1];
 
   React.useEffect(() => {
-    const token = getAccessToken();
-    if (!token) return;
-    void fetchCurrentAccount(token)
+    void fetchCurrentAccount()
       .then((account) => setAccountEmail(account.email))
       .catch(() => {
-        clearAccessToken();
         setAccountEmail(null);
       });
   }, []);
 
   async function handleSignOut() {
-    const token = getAccessToken();
-    if (token) {
-      try {
-        await signOutLocalAccount(token);
-      } catch {
-        clearAccessToken();
-      }
+    setAccountNotice('');
+    try {
+      await signOutLocalAccount();
+      setAccountEmail(null);
+      router.push('/auth/sign-in');
+    } catch {
+      setAccountNotice(
+        'Could not confirm sign-out with the server. Try again when the API is available.'
+      );
     }
-    setAccountEmail(null);
-    router.push('/auth/sign-in');
+  }
+
+  async function handleSignOutEverywhere() {
+    setAccountNotice('');
+    try {
+      await signOutEverywhere();
+      setAccountEmail(null);
+      router.push('/auth/sign-in');
+    } catch {
+      setAccountNotice(
+        'Could not revoke sessions with the server. Try again when the API is available.'
+      );
+    }
   }
 
   return (
@@ -254,10 +260,16 @@ export default function AppSidebar() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 {accountEmail ? (
-                  <DropdownMenuItem onClick={() => void handleSignOut()}>
-                    <Icons.login className='mr-2 size-4' />
-                    Sign out
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem onClick={() => void handleSignOut()}>
+                      <Icons.login className='mr-2 size-4' />
+                      Sign out
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void handleSignOutEverywhere()}>
+                      <Icons.login className='mr-2 size-4' />
+                      Sign out all sessions
+                    </DropdownMenuItem>
+                  </>
                 ) : (
                   <DropdownMenuItem onClick={() => router.push('/auth/sign-in')}>
                     <Icons.login className='mr-2 size-4' />
@@ -272,6 +284,11 @@ export default function AppSidebar() {
                   <Icons.externalLink className='mr-2 size-4' />
                   Public home
                 </DropdownMenuItem>
+                {accountNotice && (
+                  <DropdownMenuLabel className='whitespace-normal text-[10px] text-destructive'>
+                    {accountNotice}
+                  </DropdownMenuLabel>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

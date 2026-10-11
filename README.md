@@ -20,7 +20,8 @@ The role areas and developer portal are routes in one Next.js app to preserve th
 ## Product and safety boundary
 
 - Public search returns reviewed, redacted listings only. Claims, contact details, staff notes, evidence, and handover details are private.
-- Local account authentication uses PostgreSQL, bcrypt password hashes, and revocable 30-day opaque sessions. No third-party identity service is required.
+- Local account authentication uses PostgreSQL and bcrypt. New accounts must verify email before sign-in; random one-time verification and password-reset tokens are stored as digests, and reset revokes existing sessions. Browser sessions use `Secure`, `HttpOnly`, `SameSite=Lax` cookies, are revocable individually or across all devices, and are never returned as JSON bearer tokens.
+- Auth requests use persistent PostgreSQL rate-limit buckets. Verification and reset messages go only to the private local database outbox in this phase; no email provider is configured, so use synthetic `.test` addresses only.
 - Staff verify claims and coordinate returns. AI only ranks possible matches; it cannot decide ownership, approve or reject claims, or reveal withheld evidence.
 - EmbeddingGemma 2 is integrated as an optional, local-only text ranker. It loads only from a mounted/configured checkpoint, applies the model's retrieval query/document prompts, and does not persist vectors or use a vector database. The app-level matching feature flag remains off by default; AI suggestions never verify ownership or decide claims.
 - All records and institution names are synthetic. DIT is a proposed pilot only; it has not approved a pilot and is not represented as a partner.
@@ -61,7 +62,7 @@ docker compose --profile mcp up --build mcp
 
 For an MCP client on your computer, use the local stdio transport instead (see [FastMCP docs](/docs/mcp)).
 
-The full local stack uses the PostgreSQL credentials in `.env` and requires no external auth settings. Private API operations fail closed when PostgreSQL is unavailable. The web-only `pnpm dev` command can still display fictional UI preview data, but cannot create or sign in to accounts without the API/database.
+The full local stack uses the PostgreSQL credentials in `.env` and requires no external auth settings. Private API operations fail closed when PostgreSQL is unavailable. Verification and reset links are written to the local database outbox and are not delivered externally. The web-only `pnpm dev` command can still display fictional UI preview data, but cannot create or sign in to accounts without the API/database.
 
 ## Development and tests
 
@@ -69,7 +70,7 @@ The full local stack uses the PostgreSQL credentials in `.env` and requires no e
 make setup          # web dependencies, AI test extras, FastMCP test extras
 pnpm dev             # web + documentation site
 make api-test        # Go API tests
-TEST_DATABASE_URL=postgres://.../vilivyopotea_test make api-test-50  # 50-account PostgreSQL integration suite
+TEST_DATABASE_URL=postgres://.../vilivyopotea_test make api-test-50  # 50-account PostgreSQL auth/isolation/handover integration suite
 make ai-test         # Python AI service tests
 make mcp-test        # FastMCP safety/projection tests
 make test            # web checks + Go tests + AI and MCP tests

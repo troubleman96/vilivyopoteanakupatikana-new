@@ -3,12 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  isApiConfigured,
-  registerLocalAccount,
-  saveAccessToken,
-  signInLocalAccount
-} from '@/lib/api';
+import { isApiConfigured, registerLocalAccount, signInLocalAccount } from '@/lib/api';
 import { BrandMark } from './app-shell';
 
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
@@ -31,10 +26,14 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
     const password = String(form.get('password') ?? '');
     setBusy(true);
     try {
-      const session = isSignUp
-        ? await registerLocalAccount(email, password)
-        : await signInLocalAccount(email, password);
-      saveAccessToken(session.access_token);
+      if (isSignUp) {
+        await registerLocalAccount(email, password);
+        setMessage(
+          'If this address is eligible, a verification link has been added to the local mail outbox. Verify before signing in.'
+        );
+        return;
+      }
+      await signInLocalAccount(email, password);
       setMessage('Signed in. Opening your account…');
       router.push('/dashboard/account');
       router.refresh();
@@ -50,9 +49,9 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   return (
     <div className='grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]'>
       <section className='relative hidden flex-col justify-between overflow-hidden bg-[#102922] p-10 text-white lg:flex xl:p-14'>
-        <Link href='/' className='relative z-10'>
+        <div className='relative z-10'>
           <BrandMark />
-        </Link>
+        </div>
         <div className='relative z-10 max-w-lg'>
           <span className='rounded-full border border-white/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-100'>
             Synthetic preview
@@ -135,6 +134,22 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
               {busy ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
             </button>
           </form>
+          {!isSignUp && (
+            <div className='mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs'>
+              <Link
+                href='/auth/forgot-password'
+                className='font-semibold text-primary hover:underline'
+              >
+                Forgot password?
+              </Link>
+              <Link
+                href='/auth/resend-verification'
+                className='font-semibold text-primary hover:underline'
+              >
+                Resend verification email
+              </Link>
+            </div>
+          )}
           {message && (
             <p
               role='status'

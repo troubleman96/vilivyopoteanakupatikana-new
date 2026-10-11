@@ -34,7 +34,11 @@ func main() {
 	if db != nil {
 		authPool = db.Pool
 	}
-	h := api.New(db, auth.Validator{Pool: authPool}, c.DemoReads, c.AIServiceURL)
+	h := api.New(db, auth.Validator{
+		Pool:         authPool,
+		PublicAppURL: c.PublicAppURL,
+		CookieSecure: true,
+	}, c.DemoReads, c.AIServiceURL)
 	h.AIToken = c.AIServiceToken
 	h.AIMatchingEnabled = c.AIMatchingEnabled
 	h.CORSAllowedOrigins = c.CORSAllowedOrigins

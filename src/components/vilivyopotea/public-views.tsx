@@ -6,7 +6,6 @@ import { IconCheck, IconSearch } from '@tabler/icons-react';
 import { DemoNotice, ItemCard, PageHeading, StatusPill } from './primitives';
 import {
   fetchPublicInstitutions,
-  getAccessToken,
   isApiConfigured,
   searchPublicItems,
   submitPrivateClaim,
@@ -157,12 +156,7 @@ export function PublicSearchView() {
     }
     setClaimBusy(true);
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setClaimMessage('Sign in with your local account to submit a private claim.');
-        return;
-      }
-      await submitPrivateClaim(token, activeItem.id, claimStatement.trim());
+      await submitPrivateClaim(activeItem.id, claimStatement.trim());
       setClaimMessage(
         'Private claim submitted for staff review. Your statement is not shown on the public listing.'
       );
@@ -455,12 +449,7 @@ export function PublicReportView() {
     }
     setBusy(true);
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setNeedsSignIn(true);
-        return;
-      }
-      const response = await submitReport(token, form);
+      const response = await submitReport(form);
       setResult({ id: response.id, demo: false });
     } catch (submissionError) {
       setError(

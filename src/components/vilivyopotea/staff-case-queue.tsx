@@ -4,9 +4,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { DemoNotice, PageHeading, StatusPill } from './primitives';
 import {
+  fetchCurrentAccount,
   fetchPublicInstitutions,
   fetchStaffCases,
-  getAccessToken,
   reviewStaffItem,
   suggestStaffMatches,
   type MatchSuggestionResponse,
@@ -28,7 +28,7 @@ function sourceLabel(source: MatchSuggestionResponse['source']) {
 export function StaffCaseQueue() {
   const [institutions, setInstitutions] = useState<PublicInstitution[]>([]);
   const [institutionId, setInstitutionId] = useState('');
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [booting, setBooting] = useState(true);
   const [loadedInstitutionId, setLoadedInstitutionId] = useState('');
@@ -39,30 +39,23 @@ export function StaffCaseQueue() {
   const [reviewMessage, setReviewMessage] = useState<Record<string, string>>({});
   const [matches, setMatches] = useState<Record<string, MatchState>>({});
   const loadingCases = Boolean(
-    accessToken && institutionId && loadedInstitutionId !== institutionId && !queueError
+    authenticated && institutionId && loadedInstitutionId !== institutionId && !queueError
   );
 
   useEffect(() => {
     let active = true;
     async function initialize() {
       try {
-        const token = getAccessToken();
+        await fetchCurrentAccount();
         if (!active) return;
-        if (!token) {
-          setAuthRequired(true);
-          return;
-        }
-        setAccessToken(token);
+        setAuthenticated(true);
         const directory = await fetchPublicInstitutions();
         if (active) {
           setInstitutions(directory);
           setInstitutionId((current) => current || directory[0]?.id || '');
         }
-      } catch (error) {
-        if (active)
-          setQueueError(
-            error instanceof Error ? error.message : 'The staff workspace could not be loaded.'
-          );
+      } catch {
+        if (active) setAuthRequired(true);
       } finally {
         if (active) setBooting(false);
       }
@@ -74,11 +67,11 @@ export function StaffCaseQueue() {
   }, []);
 
   useEffect(() => {
-    if (!accessToken || !institutionId) return;
+    if (!authenticated || !institutionId) return;
     let active = true;
     async function loadCases() {
       try {
-        const result = await fetchStaffCases(accessToken!, institutionId);
+        const result = await fetchStaffCases(institutionId);
         if (active) {
           setCases(result);
           setLoadedInstitutionId(institutionId);
@@ -96,7 +89,7 @@ export function StaffCaseQueue() {
     return () => {
       active = false;
     };
-  }, [accessToken, institutionId]);
+  }, [authenticated, institutionId]);
 
   function updateDraft(itemId: string, key: keyof PublicDraft, value: string) {
     setDrafts((current) => ({
@@ -121,12 +114,7 @@ export function StaffCaseQueue() {
     setReviewingId(item.item_id);
     setReviewMessage((current) => ({ ...current, [item.item_id]: '' }));
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setAuthRequired(true);
-        return;
-      }
-      const response = await reviewStaffItem(token, institutionId, item.item_id, {
+      const response = await reviewStaffItem(institutionId, item.item_id, {
         status: 'approved',
         public_title: draft.title.trim(),
         public_description: draft.description.trim(),
@@ -165,16 +153,7 @@ export function StaffCaseQueue() {
   async function handleSuggest(item: StaffCase) {
     setMatches((current) => ({ ...current, [item.item_id]: { loading: true } }));
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setAuthRequired(true);
-        setMatches((current) => ({
-          ...current,
-          [item.item_id]: { error: 'Sign in again to request staff suggestions.' }
-        }));
-        return;
-      }
-      const result = await suggestStaffMatches(token, institutionId, item.item_id);
+      const result = await suggestStaffMatches(institutionId, item.item_id);
       setMatches((current) => ({ ...current, [item.item_id]: { result } }));
     } catch (error) {
       setMatches((current) => ({

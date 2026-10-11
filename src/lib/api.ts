@@ -5,7 +5,7 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/
 type ApiEnvelope<T> = { data: T };
 
 export type LocalAuthUser = { id: string; email: string };
-export type LocalAuthSession = { access_token: string; expires_at: string; user: LocalAuthUser };
+export type LocalAuthSession = { expires_at: string; user: LocalAuthUser };
 
 type PublicApiItem = {
   id: string;
@@ -128,7 +128,7 @@ function getErrorMessage(payload: unknown): string {
 
 async function requestData<T>(
   path: string,
-  options: { token?: string; method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}
+  options: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}
 ): Promise<T> {
   if (!API_BASE_URL)
     throw new Error(
@@ -136,12 +136,12 @@ async function requestData<T>(
     );
   const headers = new Headers({ Accept: 'application/json' });
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    credentials: 'include',
     cache: 'no-store'
   });
   const payload: unknown = await response.json().catch(() => null);
@@ -156,7 +156,7 @@ export function isApiConfigured(): boolean {
 export async function registerLocalAccount(
   email: string,
   password: string
-): Promise<LocalAuthSession> {
+): Promise<{ message: string }> {
   return requestData('/auth/register', { method: 'POST', body: { email, password } });
 }
 
@@ -167,29 +167,32 @@ export async function signInLocalAccount(
   return requestData('/auth/login', { method: 'POST', body: { email, password } });
 }
 
-export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.sessionStorage.getItem('vp-access-token');
+export async function verifyEmail(token: string): Promise<{ message: string }> {
+  return requestData('/auth/verify-email', { method: 'POST', body: { token } });
 }
 
-export function saveAccessToken(token: string): void {
-  window.sessionStorage.setItem('vp-access-token', token);
+export async function requestEmailVerification(email: string): Promise<{ message: string }> {
+  return requestData('/auth/verification/request', { method: 'POST', body: { email } });
 }
 
-export function clearAccessToken(): void {
-  if (typeof window !== 'undefined') window.sessionStorage.removeItem('vp-access-token');
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return requestData('/auth/password-reset/request', { method: 'POST', body: { email } });
 }
 
-export async function fetchCurrentAccount(token: string): Promise<LocalAuthUser> {
-  return requestData('/auth/me', { token });
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return requestData('/auth/password-reset/confirm', { method: 'POST', body: { token, password } });
 }
 
-export async function signOutLocalAccount(token: string): Promise<void> {
-  try {
-    await requestData('/auth/logout', { method: 'POST', token, body: {} });
-  } finally {
-    clearAccessToken();
-  }
+export async function fetchCurrentAccount(): Promise<LocalAuthUser> {
+  return requestData('/auth/me');
+}
+
+export async function signOutLocalAccount(): Promise<void> {
+  await requestData('/auth/logout', { method: 'POST', body: {} });
+}
+
+export async function signOutEverywhere(): Promise<void> {
+  await requestData('/auth/logout-all', { method: 'POST', body: {} });
 }
 
 export async function fetchPublicItems(): Promise<PublicApiItem[]> {
@@ -298,53 +301,46 @@ export function toListingCard(item: PublicApiItem): LostFoundItem {
 }
 
 export async function submitReport(
-  token: string,
   input: CreateReportInput
 ): Promise<{ id: string; status: string }> {
-  return requestData('/reports', { method: 'POST', token, body: input });
+  return requestData('/reports', { method: 'POST', body: input });
 }
 
 export async function submitPrivateClaim(
-  token: string,
   itemId: string,
   statement: string
 ): Promise<{ id: string; status: string }> {
-  return requestData('/me/claims', { method: 'POST', token, body: { item_id: itemId, statement } });
+  return requestData('/me/claims', { method: 'POST', body: { item_id: itemId, statement } });
 }
 
-export async function fetchMyReports(token: string): Promise<PrivateReport[]> {
-  return requestData('/me/reports', { token });
+export async function fetchMyReports(): Promise<PrivateReport[]> {
+  return requestData('/me/reports');
 }
 
-export async function fetchMyClaims(token: string): Promise<PrivateClaim[]> {
-  return requestData('/me/claims', { token });
+export async function fetchMyClaims(): Promise<PrivateClaim[]> {
+  return requestData('/me/claims');
 }
 
-export async function fetchStaffCases(token: string, institutionId: string): Promise<StaffCase[]> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/cases`, { token });
+export async function fetchStaffCases(institutionId: string): Promise<StaffCase[]> {
+  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/cases`);
 }
 
-export async function fetchStaffClaims(
-  token: string,
-  institutionId: string
-): Promise<StaffClaim[]> {
-  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/claims`, { token });
+export async function fetchStaffClaims(institutionId: string): Promise<StaffClaim[]> {
+  return requestData(`/staff/institutions/${encodeURIComponent(institutionId)}/claims`);
 }
 
 export async function updateStaffCase(
-  token: string,
   institutionId: string,
   caseId: string,
   status: string
 ): Promise<{ status: string }> {
   return requestData(
     `/staff/institutions/${encodeURIComponent(institutionId)}/cases/${encodeURIComponent(caseId)}`,
-    { method: 'PATCH', token, body: { status } }
+    { method: 'PATCH', body: { status } }
   );
 }
 
 export async function reviewStaffClaim(
-  token: string,
   institutionId: string,
   claimId: string,
   status: string,
@@ -352,12 +348,11 @@ export async function reviewStaffClaim(
 ): Promise<{ status: string }> {
   return requestData(
     `/staff/institutions/${encodeURIComponent(institutionId)}/claims/${encodeURIComponent(claimId)}/review`,
-    { method: 'POST', token, body: { status, staff_note: staffNote } }
+    { method: 'POST', body: { status, staff_note: staffNote } }
   );
 }
 
 export async function reviewStaffItem(
-  token: string,
   institutionId: string,
   itemId: string,
   input: {
@@ -369,18 +364,17 @@ export async function reviewStaffItem(
 ): Promise<{ review_status: string; visibility: string }> {
   return requestData(
     `/staff/institutions/${encodeURIComponent(institutionId)}/items/${encodeURIComponent(itemId)}/review`,
-    { method: 'POST', token, body: input }
+    { method: 'POST', body: input }
   );
 }
 
 export async function suggestStaffMatches(
-  token: string,
   institutionId: string,
   itemId: string
 ): Promise<MatchSuggestionResponse> {
   const data = await requestData<unknown>(
     `/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`,
-    { method: 'POST', token, body: { item_id: itemId } }
+    { method: 'POST', body: { item_id: itemId } }
   );
   if (!isRecord(data) || !Array.isArray(data.suggestions)) {
     throw new Error('The API returned an invalid match suggestion response.');
@@ -388,13 +382,10 @@ export async function suggestStaffMatches(
   return data as unknown as MatchSuggestionResponse;
 }
 
-export async function fetchInstitutionStats(
-  token: string,
-  institutionId: string
-): Promise<InstitutionStats> {
-  return requestData(`/institutions/${encodeURIComponent(institutionId)}/stats`, { token });
+export async function fetchInstitutionStats(institutionId: string): Promise<InstitutionStats> {
+  return requestData(`/institutions/${encodeURIComponent(institutionId)}/stats`);
 }
 
-export async function fetchPlatformStats(token: string): Promise<PlatformStats> {
-  return requestData('/platform/stats', { token });
+export async function fetchPlatformStats(): Promise<PlatformStats> {
+  return requestData('/platform/stats');
 }

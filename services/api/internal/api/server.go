@@ -69,6 +69,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Vary", "Origin")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 	if r.Method == http.MethodOptions {
 		if allowed {
@@ -78,6 +79,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+		if _, err := r.Cookie(auth.SessionCookieName); err == nil && (origin == "" || !allowed) {
+			fail(w, http.StatusForbidden, "origin_denied", "cookie-authenticated requests require an allowed browser origin")
+			return
+		}
+	}
 	s.mux.ServeHTTP(w, r)
 }
 func (s *Server) routes() {
@@ -85,7 +92,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /readyz", s.ready)
 	s.mux.HandleFunc("POST /api/v1/auth/register", s.registerAccount)
 	s.mux.HandleFunc("POST /api/v1/auth/login", s.signIn)
+	s.mux.HandleFunc("POST /api/v1/auth/verify-email", s.verifyEmail)
+	s.mux.HandleFunc("POST /api/v1/auth/verification/request", s.resendVerification)
+	s.mux.HandleFunc("POST /api/v1/auth/password-reset/request", s.requestPasswordReset)
+	s.mux.HandleFunc("POST /api/v1/auth/password-reset/confirm", s.resetPassword)
 	s.mux.HandleFunc("POST /api/v1/auth/logout", s.signOut)
+	s.mux.HandleFunc("POST /api/v1/auth/logout-all", s.signOutAll)
 	s.mux.HandleFunc("GET /api/v1/auth/me", s.currentAccount)
 	s.mux.HandleFunc("GET /api/v1/institutions", s.listInstitutions)
 	s.mux.HandleFunc("GET /api/v1/institutions/{institutionID}", s.getInstitution)
@@ -347,12 +359,12 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 type identity struct{ ID string }
 
 func (s *Server) private(w http.ResponseWriter, r *http.Request) (identity, bool) {
-	u, e := s.Auth.Validate(r.Context(), r.Header.Get("Authorization"))
+	u, e := s.Auth.Validate(r.Context(), requestAuthHeader(r))
 	if e != nil {
 		if errors.Is(e, auth.ErrNotConfigured) {
 			fail(w, 503, "auth_unavailable", "authentication is not configured")
 		} else if errors.Is(e, auth.ErrUnauthenticated) {
-			fail(w, 401, "unauthorized", "a valid bearer token is required")
+			fail(w, 401, "unauthorized", "a valid session is required")
 		} else {
 			fail(w, 503, "auth_unavailable", "identity provider unavailable")
 		}
