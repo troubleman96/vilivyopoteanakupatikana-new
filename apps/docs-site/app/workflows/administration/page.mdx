@@ -1,0 +1,25 @@
+---
+title: Platform administration workflow
+description: Institution provisioning, membership changes, admin governance, and audit.
+---
+
+# Platform administration workflow
+
+```mermaid
+flowchart LR
+  Admin[Signed-in platform admin] --> Check[API verifies active admin record]
+  Check --> Tenant[Set platform-admin DB context]
+  Tenant --> Action{Requested operation}
+  Action -->|create/update institution| Org[Institution state change]
+  Action -->|set membership| Member[Institution role change]
+  Action -->|grant/revoke admin| Governance[Admin governance check]
+  Governance --> Last{Would this remove final active admin?}
+  Last -->|yes| Deny[Reject]
+  Last -->|no| Save[Apply change]
+  Org --> Audit[Append platform audit in same transaction]
+  Member --> Audit
+  Save --> Audit
+  Audit --> Done[Commit + response]
+```
+
+Routes are under `/api/v1/platform/`. Every request checks an active platform-admin row. Institution memberships are managed separately and do not imply platform access. Admin modifications use a transaction-level lock to serialize last-admin checks. A change and its audit event commit together. Initial platform-admin bootstrap is a protected deployment/migration task, not an open route.

@@ -1,0 +1,74 @@
+---
+title: Application integration map
+description: Which VPK app calls which API routes and how browser clients handle sessions.
+---
+
+# Application integration map
+
+The main product API client is `src/lib/api.ts`; standalone staff/admin clients live at `apps/institution/src/lib/api.ts` and `apps/admin/src/lib/api.ts`. The landing app is informational and sends users to the product app. All API clients use `NEXT_PUBLIC_API_BASE_URL`, JSON envelopes, and browser credentials. Never expose private server credentials as `NEXT_PUBLIC_*` values.
+
+## App-to-endpoint map
+
+| Application | Capability | API calls |
+| --- | --- | --- |
+| Landing | Product introduction and links | No VPK API calls; CTA opens user app |
+| User product | Register/login/account | `/auth/register`, `/auth/login`, `/auth/verify-email`, `/auth/verification/request`, `/auth/password-reset/request`, `/auth/password-reset/confirm`, `/auth/logout`, `/auth/logout-all`, `/auth/me` |
+| User product | Browse/search | `/institutions`, `/institutions/{id}`, `/items`, `/items/search`, `/items/{id}` |
+| User product | Reports/history | `/reports`, `/me/reports` |
+| User product | Claims/history | `/me/claims` (GET and POST) |
+| Institution | Session and institution selector | `/auth/me`, `/staff/institutions` |
+| Institution | Overview and queues | `/staff/institutions/{id}/cases`, `/staff/institutions/{id}/claims`, `/institutions/{id}/stats` |
+| Institution | Case/item/claim operations | `PATCH .../cases/{caseID}`, `POST .../items/{itemID}/review`, `POST .../claims/{claimID}/review`, `POST .../claims/{claimID}/verification`, `POST .../cases/{caseID}/handover`, `POST .../matches/suggest` |
+| Admin | Overview and administration | `/auth/me`, `/platform/stats`, `/platform/institutions`, `/platform/institutions` (POST/PATCH), `/platform/institutions/{id}/memberships` (GET/PUT), `/platform/admins` (GET/PUT), `/platform/audit-events` |
+
+See the [complete endpoint catalog](/api) for full paths, methods, access levels, and purpose.
+
+## Browser request pattern
+
+The main app's `requestData` sends `credentials: 'include'`, sets JSON content type when a request body exists, disables caching, parses the JSON envelope, and surfaces the API's safe error message. Standalone apps follow the same cookie-based model. A UI selection or hidden button does not confer a role; the backend checks each request.
+
+```ts
+const response = await fetch(`${API_BASE_URL}/staff/institutions/${institutionId}/cases`, {
+  credentials: 'include',
+  cache: 'no-store',
+  headers: { Accept: 'application/json' }
+});
+```
+
+This is an example shape only; app source remains authoritative for exact helper signatures. Browser writes must use the exact configured origin and JSON. Do not store session tokens in local storage.
+
+## Docs links in VPK apps
+
+The product, institution, admin, and landing apps link to this documentation app at its root URL. Set `NEXT_PUBLIC_VPK_DOCS_URL` to the deployed docs URL; for local development use `http://localhost:3006`. Documentation links do not change authorization or app navigation state.
+
+## App request examples
+
+Public search from the user product calls `GET /api/v1/items/search`; `src/lib/api.ts` trims and URL-encodes its filters, then validates the response source and item collection:
+
+```http
+GET /api/v1/items/search?q=blue%20backpack&kind=found&category=Bags
+Accept: application/json
+```
+
+Submitting a report from the product app calls `POST /api/v1/reports` with the typed `CreateReportInput` fields:
+
+```json
+{
+  "institution_id": "fictional-institution-id",
+  "kind": "lost",
+  "category": "Electronics",
+  "title": "Fictional black headphones",
+  "description": "Example description only.",
+  "location": "Example library lobby",
+  "occurred_on": "2026-01-15",
+  "contact_details": "private example value"
+}
+```
+
+Institution workspace actions send `PATCH` to update a case with `{ "status": "under_review" }`, and `POST` to review a claim with `{ "status": "needs_information", "staff_note": "Please describe a distinguishing feature." }`. The app uses the selected institution ID in the path, but the API independently checks its membership.
+
+Admin membership changes use `PUT /api/v1/platform/institutions/{institutionID}/memberships` with `{ "email": "fictional.person@example.invalid", "role": "staff", "active": true }`. Admin API calls are privileged, auditable operations; the server checks platform-admin status on every call.
+
+All sample IDs, addresses, descriptions, and names are fictional. These snippets describe payload shape only; consult handler validation for bounds and current state constraints.
+
+For local development, start this app on port 3006 with `pnpm docs:dev` and set `NEXT_PUBLIC_VPK_DOCS_URL=http://localhost:3006` in the VPK app environment. Production builds should set the same variable to the published VPK docs URL. Set the variable to the deployed VPK docs URL in production.

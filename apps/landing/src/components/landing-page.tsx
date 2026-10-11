@@ -5,6 +5,7 @@ import { IconArrowRight, IconEyeOff, IconLock, IconSearch, IconShieldCheck } fro
 const PRODUCT_APP_URL = (
   process.env.NEXT_PUBLIC_PRODUCT_APP_URL ?? 'http://localhost:3000'
 ).replace(/\/+$/, '');
+const VPK_DOCS_URL = process.env.NEXT_PUBLIC_VPK_DOCS_URL ?? 'http://localhost:3006';
 
 function BrandMark() {
   return (
@@ -93,6 +94,14 @@ export function LandingPage() {
             <Link className='transition-colors hover:text-foreground' href={productHref('/docs')}>
               About the concept
             </Link>
+            <a
+              className='transition-colors hover:text-foreground'
+              href={VPK_DOCS_URL}
+              target='_blank'
+              rel='noreferrer'
+            >
+              Developer docs
+            </a>
           </nav>
           <Link
             href={productHref('/dashboard/search')}
@@ -417,6 +426,14 @@ export function LandingPage() {
             <Link className='transition hover:text-foreground' href={productHref('/docs')}>
               Project notes
             </Link>
+            <a
+              className='transition hover:text-foreground'
+              href={VPK_DOCS_URL}
+              target='_blank'
+              rel='noreferrer'
+            >
+              Developer docs
+            </a>
           </div>
         </div>
       </footer>

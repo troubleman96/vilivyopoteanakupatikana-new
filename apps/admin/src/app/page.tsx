@@ -29,6 +29,7 @@ const nav: [Section, string, typeof Icons.dashboard][] = [
   ['audit', 'Audit log', Icons.audit]
 ];
 const productURL = process.env.NEXT_PUBLIC_PRODUCT_APP_URL ?? 'http://localhost:3000';
+const VPK_DOCS_URL = process.env.NEXT_PUBLIC_VPK_DOCS_URL ?? 'http://localhost:3006';
 
 export default function AdminHome() {
   const [section, setSection] = useState<Section>('overview');
@@ -275,13 +276,23 @@ export default function AdminHome() {
                       : 'Review recent system and institution operations.'}
               </p>
             </div>
-            <button
-              onClick={() => void refresh()}
-              aria-label='Refresh dashboard'
-              className='grid size-10 place-items-center rounded-lg border bg-card text-muted-foreground hover:text-primary'
-            >
-              <Icons.refresh size={17} />
-            </button>
+            <div className='flex items-center gap-3'>
+              <a
+                className='text-sm font-medium text-muted-foreground hover:text-foreground'
+                href={VPK_DOCS_URL}
+                target='_blank'
+                rel='noreferrer'
+              >
+                Developer docs
+              </a>
+              <button
+                onClick={() => void refresh()}
+                aria-label='Refresh dashboard'
+                className='grid size-10 place-items-center rounded-lg border bg-card text-muted-foreground hover:text-primary'
+              >
+                <Icons.refresh size={17} />
+              </button>
+            </div>
           </header>
           <div className='mt-7 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground'>
             <span className='size-2 rounded-full bg-[#e0a640]' />

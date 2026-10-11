@@ -1,0 +1,119 @@
+---
+title: VPK Go API reference
+description: Complete route inventory for the versioned Go API and operational endpoints.
+---
+
+# Go API reference
+
+The Go service uses `net/http` method-and-path routing. Unless stated otherwise, the API base is `http://localhost:8080` and application paths are under `/api/v1`. Production deployments should use HTTPS. JSON success responses use `{ "data": ... }`; errors use `{ "error": { "code": "...", "message": "..." } }`. Responses include `X-Request-ID` for support correlation.
+
+## Route inventory
+
+### Operations
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/healthz` | Internal/public health probe | Process responds |
+| GET | `/readyz` | Internal readiness probe | Database configured and reachable |
+| GET | `/metrics` | Internal only | Low-cardinality Prometheus metrics; keep off public ingress |
+
+### Authentication and account
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/register` | Public, rate limited | Create local account and queue verification message in local outbox |
+| POST | `/api/v1/auth/login` | Public, rate limited | Authenticate and establish session cookie |
+| POST | `/api/v1/auth/verify-email` | Public, rate limited | Consume email verification token |
+| POST | `/api/v1/auth/verification/request` | Public, rate limited | Request another verification message |
+| POST | `/api/v1/auth/password-reset/request` | Public, rate limited | Queue reset instructions without disclosing account existence |
+| POST | `/api/v1/auth/password-reset/confirm` | Public, rate limited | Consume reset token and replace password; revoke sessions |
+| POST | `/api/v1/auth/logout` | Signed-in session | Revoke current session |
+| POST | `/api/v1/auth/logout-all` | Signed-in session | Revoke all sessions for current account |
+| GET | `/api/v1/auth/me` | Signed-in session | Return current account identity |
+
+### Public discovery
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/institutions` | Public | List active institutions with safe directory fields |
+| GET | `/api/v1/institutions/{institutionID}` | Public | Read one active institution's safe name and region |
+| GET | `/api/v1/items` | Public, rate limited | List approved public items; optional `q` text filter |
+| GET | `/api/v1/items/search` | Public, rate limited | Search with `q`, `kind`, `category`, `institution_id`; optionally uses matching service |
+| GET | `/api/v1/items/{itemID}` | Public | Read one public-safe item; private/unapproved records are not exposed |
+
+### User reports and claims
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/v1/reports` | Signed-in user | Submit a lost/found report; item and case are created transactionally |
+| GET | `/api/v1/me/reports` | Signed-in user | List current user's reports |
+| POST | `/api/v1/me/claims` | Signed-in user | Submit a private claim for a found public item |
+| GET | `/api/v1/me/claims` | Signed-in user | List current user's claims |
+
+### Institution staff
+
+Every `{institutionID}` is checked against the caller's active membership and tenant scope.
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/staff/institutions` | Staff | List institutions available to current staff identity |
+| GET | `/api/v1/staff/institutions/{institutionID}/cases` | Staff in institution | List institution case queue |
+| GET | `/api/v1/staff/institutions/{institutionID}/claims` | Staff in institution | List private claim queue for authorized staff |
+| PATCH | `/api/v1/staff/institutions/{institutionID}/cases/{caseID}` | Staff in institution | Change case workflow status (`open`, `under_review`, `matched`, `closed`) |
+| POST | `/api/v1/staff/institutions/{institutionID}/claims/{claimID}/review` | Staff in institution | Approve, reject, or request more information |
+| POST | `/api/v1/staff/institutions/{institutionID}/claims/{claimID}/verification` | Staff in institution | Record verification step for an approved claim |
+| POST | `/api/v1/staff/institutions/{institutionID}/items/{itemID}/review` | Staff in institution | Approve safe public fields or reject report |
+| POST | `/api/v1/staff/institutions/{institutionID}/cases/{caseID}/handover` | Staff in institution | Record verified return of a matched item |
+| POST | `/api/v1/staff/institutions/{institutionID}/matches/suggest` | Staff in institution | Return ranked, non-binding candidate suggestions |
+| GET | `/api/v1/institutions/{institutionID}/stats` | Staff in institution | Read institution dashboard counts |
+
+### Platform administration
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/platform/stats` | Platform admin | Read platform summary counts |
+| GET | `/api/v1/platform/institutions` | Platform admin | List institutions including administrative state |
+| POST | `/api/v1/platform/institutions` | Platform admin | Create institution |
+| PATCH | `/api/v1/platform/institutions/{institutionID}` | Platform admin | Update institution state/details |
+| GET | `/api/v1/platform/institutions/{institutionID}/memberships` | Platform admin | List tenant memberships |
+| PUT | `/api/v1/platform/institutions/{institutionID}/memberships` | Platform admin | Set or update a user's institution membership |
+| GET | `/api/v1/platform/admins` | Platform admin | List platform administrators |
+| PUT | `/api/v1/platform/admins` | Platform admin | Grant or revoke platform administrator status, subject to last-admin guard |
+| GET | `/api/v1/platform/audit-events` | Platform admin | Read platform administration audit events |
+
+## Calling the API
+
+```bash
+curl --include \
+  'http://localhost:8080/api/v1/items/search?q=blue%20backpack&kind=found' \
+  -H 'Accept: application/json'
+```
+
+A browser app sends the session cookie automatically with `credentials: 'include'`. A signed-in caller may also use `Authorization: Bearer <session-token>` where the client integration supports it. Cookie-authenticated state changes must originate from an allowed browser origin. Do not put tokens in URLs.
+
+```json
+{
+  "data": [
+    {
+      "id": "fictional-item-id",
+      "institution_id": "fictional-institution-id",
+      "institution_name": "Example Campus",
+      "category": "Bags",
+      "title": "Blue backpack",
+      "description": "A blue backpack with a small stitched patch.",
+      "location": "Main library area",
+      "occurred_on": "2026-01-15",
+      "kind": "found",
+      "status": "found"
+    }
+  ]
+}
+```
+
+All values above are illustrative. Public data is sourced from the safe public projection, not from private report fields.
+
+## Errors and limits
+
+Errors use a stable machine-readable `code` and a concise safe `message`. Common statuses include 400 validation, 401 unauthenticated, 403 unauthorized/origin denied, 404 unavailable or not found, 409 state conflict, 413 body too large, 429 rate limited, and 503 unavailable/not ready. The API caps JSON request bodies at 1 MiB. See [Security and operations](/security) for origin rules, forwarded IP trust, and current rate-limit policy.
+
+For detailed request/response fields and behavior by domain, see [authentication and identity](/api/authentication), [public discovery](/api/discovery), [user actions](/api/user-actions), [institution operations](/api/staff), and [platform administration](/api/platform).

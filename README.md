@@ -11,12 +11,12 @@ A Tanzania lost-and-found platform foundation in one repository: a responsive Ne
 | Individual user routes | `/dashboard/search`, `/dashboard/report`, `/dashboard/account` | Search reviewed listings and manage fictional report/claim previews. |
 | Institution and security staff app | `apps/institution/` (`http://localhost:3004`) | Institution-scoped cases, claim review, and operational overview. |
 | System administration app | `apps/admin/` (`http://localhost:3003`) | Institution directory, staff memberships, platform administrators, and audit review. |
-| Developer documentation site | `/docs` | Next.js docs covering architecture, API, Python AI and embeddings, web app, MCP, and security boundaries. |
+| Developer documentation site | `apps/docs-site/` (`http://localhost:3006`) | Standalone VPK docs for all API endpoints, services, workflows, matching, security, and app integrations. |
 | FastMCP server | `services/mcp/` | Optional read-only MCP tools for reviewed public listings and the active institution directory. |
 | Go API | `services/api/` | Modular-monolith API, authentication checks, institution scoping, PostgreSQL migrations, and OpenAPI-ready routes. |
 | Python AI service | `services/ai/` | Private matching-suggestion ranker with optional local EmbeddingGemma 2 semantic matching and a deterministic fallback. |
 
-The individual product and developer portal share one Next.js app. Institution operations and system administration are separate Next.js apps and deployable URLs. They share the PostgreSQL-backed Go API and session cookie; the apps do not grant trust themselves. Account sessions, institution membership, platform-admin access, and private data scopes are checked server-side.
+The product app, developer docs, landing site, institution workspace, and admin console are separate Next.js apps. Institution operations and system administration use separate deployable URLs. The product, Institution, and Admin apps share the PostgreSQL-backed Go API and session cookie; the apps do not grant trust themselves. The docs site is static documentation and does not call the API. Account sessions, institution membership, platform-admin access, and private data scopes are checked server-side.
 
 ## Product and safety boundary
 
@@ -42,7 +42,7 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Run `pnpm landing:dev`, `pnpm institution:dev`, and `pnpm admin:dev` in separate terminals for the other apps at ports 3001, 3004, and 3003. The product app runs at port 3000; its root redirects to public search and its sidebar links to the operator apps. Configure `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_PRODUCT_APP_URL`, `NEXT_PUBLIC_INSTITUTION_APP_URL`, and `NEXT_PUBLIC_ADMIN_APP_URL` to change the local URLs. All four frontend origins must be allowed by `CORS_ALLOWED_ORIGINS` when using cookie sessions. Every app uses Outfit for body text and Bricolage Grotesque for headings and emphasized text. The product app uses a fixed Lagoon palette; light or dark mode follows the operating system automatically. Demo role switching is only for preview; it never grants real permissions.
+Run `pnpm landing:dev`, `pnpm institution:dev`, `pnpm admin:dev`, and `pnpm docs:dev` in separate terminals for the other apps at ports 3001, 3004, 3003, and 3006. The product app runs at port 3000; its root redirects to public search and its sidebar links to the operator apps. Configure `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_PRODUCT_APP_URL`, `NEXT_PUBLIC_INSTITUTION_APP_URL`, `NEXT_PUBLIC_ADMIN_APP_URL`, and `NEXT_PUBLIC_VPK_DOCS_URL` to change the local URLs. The product, Institution, and Admin origins must be allowed by `CORS_ALLOWED_ORIGINS` for cookie sessions; the landing and docs sites do not call the API. Every app uses Outfit for body text and Bricolage Grotesque for headings and emphasized text. The product app uses a fixed Lagoon palette; light or dark mode follows the operating system automatically. Demo role switching is only for preview; it never grants real permissions.
 
 ## Run the local stack
 
@@ -55,7 +55,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, product, marketing, Institution, and Admin apps. The sites and API are published on localhost (ports 3000–3001 and 3003–3004, plus API 8080); PostgreSQL and AI are not host-published. Do not change `PUBLIC_BIND_ADDRESS` to expose these development ports publicly. For an authorized HTTPS deployment, follow [docs/deployment.md](docs/deployment.md) and its Caddy overlay prerequisites. Open <http://localhost:3000>, <http://localhost:3001>, <http://localhost:3003>, or <http://localhost:3004> for the four apps; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
+Compose starts PostgreSQL on a private network, applies Go migrations, and starts the API, private AI service, product, marketing, Institution, and Admin apps. The docs app is run separately with `pnpm docs:dev`. The sites and API are published on localhost (ports 3000–3001 and 3003–3004, plus API 8080); PostgreSQL and AI are not host-published. Do not change `PUBLIC_BIND_ADDRESS` to expose these development ports publicly. For an authorized HTTPS deployment, follow [docs/deployment.md](docs/deployment.md) and its Caddy overlay prerequisites. Open <http://localhost:3000>, <http://localhost:3001>, <http://localhost:3003>, or <http://localhost:3004> for the four apps; API liveness is at <http://localhost:8080/healthz>. `docker compose down` stops services; `docker compose down -v` also deletes the local database volume.
 
 The optional Compose MCP profile runs the MCP adapter on the private Docker network only; it publishes no host port:
 
@@ -71,7 +71,8 @@ The full local stack uses the PostgreSQL credentials in `.env` and requires no e
 
 ```bash
 make setup          # web dependencies, AI test extras, FastMCP test extras
-pnpm dev             # web + documentation site
+pnpm dev             # product web app
+pnpm docs:dev        # standalone VPK documentation app at localhost:3006
 make api-test        # Go API tests
 TEST_DATABASE_URL=postgres://.../vilivyopotea_test make api-test-50  # 50-account PostgreSQL auth/isolation/handover integration suite
 make ai-test         # Python AI service tests

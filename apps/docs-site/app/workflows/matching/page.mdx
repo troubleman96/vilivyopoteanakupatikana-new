@@ -1,0 +1,32 @@
+---
+title: Match suggestion workflow
+description: Candidate filtering and ranking for public search and staff assistance.
+---
+
+# Match suggestion workflow
+
+```mermaid
+sequenceDiagram
+  participant App as User or institution app
+  participant Go as Go API
+  participant DB as PostgreSQL
+  participant AI as Private ranker
+  App->>Go: Search query or staff suggestion request
+  Go->>Go: Authenticate/authorize and validate filters
+  Go->>DB: Select eligible public or same-institution candidates
+  DB-->>Go: At most 1,200 bounded candidates
+  alt matching enabled and service reachable
+    Go->>AI: Minimal query/candidate records + internal bearer token
+    AI->>AI: Validate privacy, calculate scores, rank top five
+    AI-->>Go: IDs, scores, explanations, source
+  else disabled or unavailable
+    Go->>DB: PostgreSQL text-search fallback
+    DB-->>Go: Bounded shortlist
+  end
+  Go->>Go: Map IDs to authorized safe/staff projections
+  Go-->>App: Suggestions; staff decision still required
+```
+
+Staff candidates are constrained to the same institution, opposite kinds, public-approved, nonclosed/nonreturned items, and optional category/date window. Public search candidates come only from public-safe rows. The Python ranker applies lexical, metadata, and optionally local semantic scores. Details and formulas are on [Matching service and algorithm](/services/matching).
+
+A high score does not prove ownership or a match. Staff must independently review and verify claims. AI is disabled by default; the Go API remains functional using its text-search fallback.

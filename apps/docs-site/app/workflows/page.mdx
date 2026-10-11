@@ -1,0 +1,29 @@
+---
+title: VPK workflow guides
+description: State transitions across user, staff, platform, and matching flows.
+---
+
+# Workflow guides
+
+These workflows describe behavior implemented by the API and database. A UI step is never proof of authorization; every operation is checked by the API and database.
+
+- [Report to public listing](/workflows/report-to-public-listing)
+- [Claim to verified handover](/workflows/claim-to-handover)
+- [Match suggestions](/workflows/matching)
+- [Platform administration](/workflows/administration)
+
+```mermaid
+stateDiagram-v2
+  [*] --> ReportedPrivate
+  ReportedPrivate --> PublicApproved: staff approves safe fields
+  ReportedPrivate --> RejectedPrivate: staff rejects
+  PublicApproved --> ClaimPending: user submits claim
+  ClaimPending --> NeedsInformation: staff requests information
+  ClaimPending --> ClaimRejected: staff rejects
+  ClaimPending --> ClaimApproved: staff approves
+  ClaimApproved --> ClaimVerified: staff records verification
+  ClaimVerified --> Returned: staff records handover
+  PublicApproved --> CaseClosed: staff closes without handover
+```
+
+A returned item is reached through the dedicated handover transition. It cannot be set by editing case status directly.

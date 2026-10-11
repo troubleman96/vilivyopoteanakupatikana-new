@@ -22,6 +22,7 @@ import {
 } from '@/lib/api';
 
 const productURL = process.env.NEXT_PUBLIC_PRODUCT_APP_URL ?? 'http://localhost:3000';
+const VPK_DOCS_URL = process.env.NEXT_PUBLIC_VPK_DOCS_URL ?? 'http://localhost:3006';
 type Section = 'overview' | 'cases' | 'claims';
 const nav: [Section, string, typeof Icons.cases][] = [
   ['overview', 'Overview', Icons.institution],
@@ -336,6 +337,14 @@ export default function InstitutionHome() {
               </p>
             </div>
             <div className='flex items-center gap-2'>
+              <a
+                className='mr-1 text-sm font-medium text-muted-foreground hover:text-foreground'
+                href={VPK_DOCS_URL}
+                target='_blank'
+                rel='noreferrer'
+              >
+                Developer docs
+              </a>
               <label className='sr-only' htmlFor='institution'>
                 Institution
               </label>

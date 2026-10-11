@@ -1,0 +1,39 @@
+---
+title: Claim to verified handover
+description: State and invariant checks required before recording an item's return.
+---
+
+# Claim to verified handover
+
+```mermaid
+flowchart TD
+  Found[Public found item] --> Claim[User submits private claim]
+  Claim --> Queue[Claim visible to authorized institution staff]
+  Queue --> Decision{Staff review}
+  Decision -->|needs information| More[Request more information]
+  More --> Queue
+  Decision -->|reject| Rejected[Claim rejected]
+  Decision -->|approve| Approved[Claim approved]
+  Approved --> Verification[Staff records method + note]
+  Verification --> Fresh{Verification matches current review?}
+  Fresh -->|no| Approved
+  Fresh -->|yes| Preconditions{Case matched, claim current, no prior handover?}
+  Preconditions -->|no| Conflict[Reject transition]
+  Preconditions -->|yes| Handover[Record private handover transaction]
+  Handover --> Returned[Case and item become returned]
+  Handover --> Audit[Append audit event]
+```
+
+A claim is submitted against a found public item. The claimant statement and contact/evidence fields are private. Staff review decisions are `approved`, `rejected`, or `needs_information`; review note and timestamp are recorded with the decision.
+
+Verification is a separate step after approval. Supported methods are `in_person`, `video_call`, `document_review`, and `other`; a note must be 8–2000 runes. Verification stores the reviewed timestamp it applies to. If staff changes the claim decision afterward, the old verification no longer qualifies.
+
+Handover requires all of the following at commit time:
+
+1. The case belongs to the requested institution and is in `matched` state.
+2. The claim belongs to the found item attached to that case.
+3. The claim is currently approved and has valid verification for its current review.
+4. The case/item has not already been handed over.
+5. Database constraints and triggers accept the transition.
+
+The transaction creates the handover record, updates case/item state, and appends an operational audit event atomically. Failure of any precondition leaves no partial return state.

@@ -1,0 +1,28 @@
+{
+  "name": "@vilivyopotea/docs-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack -p 3006",
+    "build": "next build",
+    "start": "next start -p 3006",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/patch-nextra-layout.mjs",
+    "predev": "node scripts/patch-nextra-layout.mjs",
+    "prebuild": "node scripts/patch-nextra-layout.mjs",
+    "prestart": "node scripts/patch-nextra-layout.mjs"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "nextra": "4.6.1",
+    "nextra-theme-docs": "4.6.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.7.2"
+  }
+}

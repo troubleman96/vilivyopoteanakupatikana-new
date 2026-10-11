@@ -1,0 +1,36 @@
+---
+title: Report to public listing
+description: How a private lost/found report becomes an approved public summary.
+---
+
+# Report to public listing
+
+```mermaid
+sequenceDiagram
+  participant U as User app
+  participant API as Go API
+  participant DB as PostgreSQL
+  participant S as Institution staff app
+  U->>API: POST /api/v1/reports
+  API->>DB: Validate institution + insert private item and case atomically
+  API-->>U: Report accepted (pending/private)
+  S->>API: GET staff institution cases
+  API->>DB: Check active membership + tenant RLS
+  DB-->>S: Authorized private queue rows
+  S->>API: POST item review with safe public fields
+  API->>DB: Validate + audit + set approved projection
+  DB-->>API: Commit
+  API-->>S: Review result
+  U->>API: GET /api/v1/items or /items/search
+  API->>DB: Query safe public_items view
+  API-->>U: Approved safe listing only
+```
+
+Report insertion creates item and case in one database transaction. The private source description and contact information are not automatically copied to public fields. Staff explicitly supplies approved public title, description, and location; contact patterns and unsafe field limits are rejected. Rejection leaves the item private. The public API reads from the safe view and cannot expose unreviewed records.
+
+## Operational notes
+
+- Report submitters must be signed in and own their report history.
+- Only active institution staff can see the private queue.
+- Review writes are audited without copying sensitive text into audit metadata.
+- Public listing is a separately selected projection, not a frontend filter over private records.

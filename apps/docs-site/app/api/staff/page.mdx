@@ -1,0 +1,50 @@
+---
+title: Institution staff operations
+description: Institution-scoped queues, item review, claims, matching, and verified handover.
+---
+
+# Institution staff operations
+
+Every `{institutionID}` is checked against an active membership and tenant context. Staff responses may contain sensitive operational fields and must stay within the authorized staff app/API boundary.
+
+| Method + path | Purpose |
+| --- | --- |
+| `GET /api/v1/staff/institutions` | List institutions available to current staff identity |
+| `GET /api/v1/staff/institutions/{institutionID}/cases` | Read the institution case queue |
+| `GET /api/v1/staff/institutions/{institutionID}/claims` | Read the private claim queue |
+| `PATCH /api/v1/staff/institutions/{institutionID}/cases/{caseID}` | Set case status: `open`, `under_review`, `matched`, or `closed` |
+| `POST /api/v1/staff/institutions/{institutionID}/claims/{claimID}/review` | Decide `approved`, `rejected`, or `needs_information`; record note/review time |
+| `POST /api/v1/staff/institutions/{institutionID}/claims/{claimID}/verification` | Record verification after approval |
+| `POST /api/v1/staff/institutions/{institutionID}/items/{itemID}/review` | Approve safe public fields or reject report |
+| `POST /api/v1/staff/institutions/{institutionID}/cases/{caseID}/handover` | Record return after valid claim verification |
+| `POST /api/v1/staff/institutions/{institutionID}/matches/suggest` | Generate non-binding candidate suggestions |
+| `GET /api/v1/institutions/{institutionID}/stats` | Read institution counts for workspace overview |
+
+## Review boundaries
+
+Item approval requires public-safe title, description, and location fields. Contact patterns are rejected from the public projection. Rejected items remain private. Claim review can request more information; an approved claim still must be verified before handover.
+
+Verification methods are `in_person`, `video_call`, `document_review`, or `other`. A staff verification note is required (8–2000 runes). Verification binds to the claim's exact `reviewed_at` value, so changing the decision invalidates earlier verification and requires a new one.
+
+Case `PATCH` is not a handover operation. The API does not allow clients to directly set `returned`; return is recorded through the dedicated handover endpoint after all preconditions pass.
+
+## Handover request
+
+The institution app sends the claim ID, timestamp, details, and recipient to the case-specific handover route after staff have reviewed and verified the claim:
+
+```json
+{
+  "claim_id": "fictional-claim-id",
+  "handover_at": "2026-01-16T10:00:00Z",
+  "details": "Example handover note",
+  "recipient": "Fictional recipient"
+}
+```
+
+The request body is not enough to authorize a return; the server checks the current case, claim, verification, and prior-handover state transactionally.
+
+## Suggested matches
+
+The staff matching endpoint considers records in the same institution, opposite lost/found kind, public-approved and not closed/returned, with optional exact category and date window of 0, 7, 30, or 90 days. The candidate set is capped at 1,200. Results are suggestions, never automatic claim decisions. Matching defaults off and can fall back to PostgreSQL text search when the private AI service is disabled or unavailable.
+
+Rate limits and match algorithm details are in [matching service](/services/matching). The endpoint records the shortlist request without storing claimant secrets in an audit event.

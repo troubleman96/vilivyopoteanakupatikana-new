@@ -9,6 +9,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL ?? 'http://localhost:3001';
+const VPK_DOCS_URL = process.env.NEXT_PUBLIC_VPK_DOCS_URL ?? 'http://localhost:3006';
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -59,6 +60,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
               <a className='font-semibold text-primary hover:underline' href={LANDING_URL}>
                 About the project
+              </a>
+              <span className='mx-2' aria-hidden>
+                ·
+              </span>
+              <a
+                className='font-semibold text-primary hover:underline'
+                href={VPK_DOCS_URL}
+                target='_blank'
+                rel='noreferrer'
+              >
+                Developer docs
               </a>
             </footer>
           </main>
