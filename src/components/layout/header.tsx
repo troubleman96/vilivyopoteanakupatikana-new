@@ -1,14 +1,9 @@
-import React from 'react';
 import { SidebarTrigger } from '../ui/sidebar';
 import { Separator } from '../ui/separator';
 import { Breadcrumbs } from '../breadcrumbs';
 import SearchInput from '../search-input';
-import { ThemeSelector } from '../themes/theme-selector';
-import { ThemeModeToggle } from '../themes/theme-mode-toggle';
 import CtaGithub from './cta-github';
 import { NotificationCenter } from '@/features/notifications/components/notification-center';
-import Link from 'next/link';
-import { IconPalette } from '@tabler/icons-react';
 
 export default function Header() {
   return (
@@ -23,17 +18,6 @@ export default function Header() {
         <CtaGithub />
         <div className='hidden md:flex'>
           <SearchInput />
-        </div>
-        <Link
-          href='/dashboard/appearance'
-          className='inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden'
-          aria-label='Appearance settings'
-        >
-          <IconPalette size={17} stroke={1.8} />
-        </Link>
-        <ThemeModeToggle />
-        <div className='hidden sm:block'>
-          <ThemeSelector />
         </div>
         <NotificationCenter />
       </div>

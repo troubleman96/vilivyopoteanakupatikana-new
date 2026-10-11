@@ -68,20 +68,13 @@ export const navGroups: NavGroup[] = [
     ]
   },
   {
-    label: 'Platform & preferences',
+    label: 'Platform',
     items: [
       {
         title: 'Platform overview',
         url: '/dashboard/platform',
         icon: 'laptop',
         shortcut: ['p', 'o'],
-        items: []
-      },
-      {
-        title: 'Appearance',
-        url: '/dashboard/appearance',
-        icon: 'palette',
-        shortcut: ['a', 'p'],
         items: []
       }
     ]

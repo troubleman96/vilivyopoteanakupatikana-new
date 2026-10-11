@@ -1,15 +1,5 @@
-/* Keep every starter appearance available in the theme chooser. */
-@import './themes/vilivyopotea.css';
-@import './themes/claude.css';
-@import './themes/discord.css';
+/* The Supabase palette is fixed; color mode follows the operating system. */
 @import './themes/supabase.css';
-@import './themes/vercel.css';
-@import './themes/mono.css';
-@import './themes/notebook.css';
-@import './themes/light-green.css';
-@import './themes/zen.css';
-@import './themes/astro-vista.css';
-@import './themes/whatsapp.css';
 
 body {
   @apply overscroll-none;

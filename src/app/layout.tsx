@@ -1,10 +1,9 @@
 import Providers from '@/components/layout/providers';
 import { Toaster } from '@/components/ui/sonner';
-import { DEFAULT_THEME, THEMES } from '@/components/themes/theme.config';
+import { DEFAULT_THEME } from '@/components/themes/theme.config';
 import ThemeProvider from '@/components/themes/theme-provider';
 import { cn } from '@/lib/utils';
 import type { Metadata, Viewport } from 'next';
-import { cookies } from 'next/headers';
 import { Outfit } from 'next/font/google';
 import NextTopLoader from 'nextjs-toploader';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
@@ -25,24 +24,21 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: '#3ecf8e' };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const savedTheme = cookieStore.get('active_theme')?.value;
-  const theme = THEMES.some((item) => item.value === savedTheme) ? savedTheme! : DEFAULT_THEME;
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang='en' suppressHydrationWarning data-theme={theme} className={outfit.variable}>
+    <html lang='en' suppressHydrationWarning data-theme={DEFAULT_THEME} className={outfit.variable}>
       <body className={cn('min-h-screen overflow-x-hidden bg-background font-sans antialiased')}>
         <NextTopLoader color='var(--primary)' showSpinner={false} />
         <NuqsAdapter>
           <ThemeProvider
             attribute='class'
             defaultTheme='system'
+            storageKey='vilivyopotea-system-color-mode'
             enableSystem
             disableTransitionOnChange
             enableColorScheme
           >
-            <Providers activeThemeValue={theme}>
+            <Providers>
               <Toaster richColors position='top-right' />
               {children}
             </Providers>

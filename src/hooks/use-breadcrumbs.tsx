@@ -33,12 +33,8 @@ const routeMapping: Record<string, BreadcrumbItem[]> = {
     { title: 'Institution overview', link: '/dashboard/institution' }
   ],
   '/dashboard/platform': [
-    { title: 'Platform & preferences', link: '/dashboard/platform' },
+    { title: 'Platform', link: '/dashboard/platform' },
     { title: 'Platform overview', link: '/dashboard/platform' }
-  ],
-  '/dashboard/appearance': [
-    { title: 'Platform & preferences', link: '/dashboard/appearance' },
-    { title: 'Appearance', link: '/dashboard/appearance' }
   ]
 };
 

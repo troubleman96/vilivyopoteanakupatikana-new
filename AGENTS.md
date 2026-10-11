@@ -237,38 +237,9 @@ NEXT_PUBLIC_SENTRY_DISABLED="false"  # Set to "true" to disable in dev
 
 ---
 
-## Theming System
+## Appearance
 
-The project uses a multi-theme system with 11 selectable themes:
-
-- `supabase` (default)
-- `vilivyopotea` (alternate brand palette)
-- `claude`
-- `discord`
-- `vercel`
-- `mono`
-- `notebook`
-- `light-green`
-- `zen`
-- `astro-vista`
-- `whatsapp`
-
-### Theme Files
-
-- CSS files: `src/styles/themes/{theme-name}.css`
-- Theme registry: `src/components/themes/theme.config.ts`
-- Font config: `src/components/themes/font.config.ts`
-- Active theme provider: `src/components/themes/active-theme.tsx`
-
-### Adding a New Theme
-
-1. Create `src/styles/themes/your-theme.css` with `[data-theme='your-theme']` selector
-2. Import in `src/styles/theme.css`
-3. Add to `THEMES` array in `src/components/themes/theme.config.ts`
-4. (Optional) Add fonts in `font.config.ts`
-5. (Optional) Set as default in `theme.config.ts`
-
-See `docs/themes.md` for detailed theming guide.
+The UI uses the fixed `supabase` palette and Outfit font. Its light/dark color mode follows the operating system; there are no in-app palette or mode selectors, appearance route, or theme-switching keyboard actions. The palette is loaded from `src/styles/themes/supabase.css` via `src/styles/theme.css`, with `DEFAULT_THEME` in `src/components/themes/theme.config.ts` set to `supabase`.
 
 ---
 
@@ -623,9 +594,9 @@ Browse all available icons at `/dashboard/elements/icons` — a searchable grid 
 npx shadcn add component-name
 ```
 
-### Adding a New Theme
+### Fixed Appearance
 
-See "Theming System" section above or `docs/themes.md`.
+The app uses one fixed Supabase palette. See the Appearance section above and `docs/themes.md` for its source of truth.
 
 ---
 

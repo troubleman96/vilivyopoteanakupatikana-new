@@ -31,7 +31,7 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The public site and synthetic workspaces run without credentials. Sign-in and registration show a setup state until Supabase is configured. The appearance gallery includes all available palettes and Light/Dark/System modes. Demo role switching is only for preview; it never grants real permissions.
+Open <http://localhost:3000>. The public site and synthetic workspaces run without credentials. Sign-in and registration show a setup state until Supabase is configured. The UI uses a fixed Supabase palette and Outfit font; light or dark mode follows the operating system automatically, with no in-app appearance controls. Demo role switching is only for preview; it never grants real permissions.
 
 ## Run the local stack
 

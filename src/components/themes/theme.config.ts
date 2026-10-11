@@ -1,16 +1,2 @@
-/** Supabase is the default shell appearance; every preset remains selectable. */
+/** The Supabase palette is fixed across the app; there is no palette selector. */
 export const DEFAULT_THEME = 'supabase';
-
-export const THEMES = [
-  { name: 'Vilivyopotea · Trust green', value: 'vilivyopotea' },
-  { name: 'Claude', value: 'claude' },
-  { name: 'Discord', value: 'discord' },
-  { name: 'Supabase', value: 'supabase' },
-  { name: 'Vercel', value: 'vercel' },
-  { name: 'Mono', value: 'mono' },
-  { name: 'Notebook', value: 'notebook' },
-  { name: 'Light Green', value: 'light-green' },
-  { name: 'Zen', value: 'zen' },
-  { name: 'Astro Vista', value: 'astro-vista' },
-  { name: 'WhatsApp', value: 'whatsapp' }
-];

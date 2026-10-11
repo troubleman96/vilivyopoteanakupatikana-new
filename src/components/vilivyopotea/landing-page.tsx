@@ -1,8 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
-import { ThemeSelector } from '@/components/themes/theme-selector';
 import { BrandMark } from './app-shell';
 import { Artwork, DemoNotice } from './primitives';
 import { demoItems } from '@/lib/demo-data';
@@ -15,7 +13,7 @@ export function LandingPage() {
       <div className='mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-4 px-4 sm:px-8'>
         <Link href='/'><BrandMark /></Link>
         <nav className='hidden items-center gap-7 text-xs font-medium text-muted-foreground lg:flex' aria-label='Main navigation'><a href='#how-it-works' className='hover:text-foreground'>How it works</a><Link href='/dashboard/search' className='hover:text-foreground'>Search items</Link><a href='#safety' className='hover:text-foreground'>Safety</a><Link href='/dashboard/overview' className='hover:text-foreground'>Demo workspaces</Link></nav>
-        <div className='flex items-center gap-2'><div className='hidden sm:block'><ThemeSelector /></div><ThemeModeToggle /><Link href='/auth/sign-in' className='hidden rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted sm:inline-flex'>Sign in</Link><Link href='/dashboard/report' className='rounded-xl bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground hover:opacity-90 sm:px-4'>Report an item</Link></div>
+        <div className='flex items-center gap-2'><Link href='/auth/sign-in' className='hidden rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted sm:inline-flex'>Sign in</Link><Link href='/dashboard/report' className='rounded-xl bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground hover:opacity-90 sm:px-4'>Report an item</Link></div>
       </div>
     </header>
     <main>
@@ -54,6 +52,6 @@ export function LandingPage() {
       </section>
       <section className='mx-auto max-w-7xl px-4 py-10 sm:px-8'><DemoNotice /></section>
     </main>
-    <footer className='border-t border-border'><div className='mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8'><span>Vilivyopotea na Kupatikana · A concept built for safer returns</span><div className='flex gap-4'><Link href='/dashboard/appearance' className='hover:text-foreground'>Appearance</Link><Link href='/auth/sign-in' className='hover:text-foreground'>Account</Link><Link href='/dashboard/platform' className='hover:text-foreground'>Owner demo</Link></div></div></footer>
+    <footer className='border-t border-border'><div className='mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-[10px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-8'><span>Vilivyopotea na Kupatikana · A concept built for safer returns</span><div className='flex gap-4'><Link href='/auth/sign-in' className='hover:text-foreground'>Account</Link><Link href='/dashboard/platform' className='hover:text-foreground'>Owner demo</Link></div></div></footer>
   </div>;
 }
