@@ -5,16 +5,20 @@ import ThemeProvider from '@/components/themes/theme-provider';
 import { cn } from '@/lib/utils';
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
+import { Outfit } from 'next/font/google';
 import NextTopLoader from 'nextjs-toploader';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import '../styles/globals.css';
+
+const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
 
 export const metadata: Metadata = {
   title: {
     default: 'Vilivyopotea na Kupatikana',
     template: '%s · Vilivyopotea na Kupatikana'
   },
-  description: 'A careful lost-and-found service for Tanzania: public discovery, private claims and staff-mediated returns.',
+  description:
+    'A careful lost-and-found service for Tanzania: public discovery, private claims and staff-mediated returns.',
   applicationName: 'Vilivyopotea na Kupatikana',
   robots: { index: false, follow: false }
 };
@@ -27,11 +31,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = THEMES.some((item) => item.value === savedTheme) ? savedTheme! : DEFAULT_THEME;
 
   return (
-    <html lang='en' suppressHydrationWarning data-theme={theme}>
+    <html lang='en' suppressHydrationWarning data-theme={theme} className={outfit.variable}>
       <body className={cn('min-h-screen overflow-x-hidden bg-background font-sans antialiased')}>
         <NextTopLoader color='var(--primary)' showSpinner={false} />
         <NuqsAdapter>
-          <ThemeProvider attribute='class' defaultTheme='system' enableSystem disableTransitionOnChange enableColorScheme>
+          <ThemeProvider
+            attribute='class'
+            defaultTheme='system'
+            enableSystem
+            disableTransitionOnChange
+            enableColorScheme
+          >
             <Providers activeThemeValue={theme}>
               <Toaster richColors position='top-right' />
               {children}

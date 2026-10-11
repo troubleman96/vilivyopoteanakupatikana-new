@@ -20,7 +20,7 @@ body {
 }
 
 [data-theme] body {
-  --font-sans: initial;
+  --font-sans: var(--font-outfit), sans-serif;
   --font-mono: initial;
   --font-serif: initial;
   font-family: var(--font-sans);
