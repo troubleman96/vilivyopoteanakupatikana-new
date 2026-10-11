@@ -6,7 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 ENV PORT=8090
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        --extra-index-url https://pypi.org/simple \
+        torch torchvision \
+    && pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 10001 appuser
 COPY --chown=10001:10001 main.py embeddinggemma.py ./
 USER 10001:10001

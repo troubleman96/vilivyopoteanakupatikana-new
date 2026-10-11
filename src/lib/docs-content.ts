@@ -126,13 +126,13 @@ export const documentationPages: Record<string, DocumentationPage> = {
     title: 'AI suggestions and embeddings',
     eyebrow: 'PYTHON AI SERVICE',
     summary:
-      'Public search and the authenticated staff queue can use a local EmbeddingGemma 2 checkpoint for semantic ranking of reviewed public-safe summaries; text search remains the default unless the local model override is explicitly enabled.',
+      'Public search and the authenticated staff queue can use a local EmbeddingGemma 2 checkpoint for hybrid ranking of reviewed public-safe summaries; text search remains the default unless matching is explicitly approved and enabled.',
     sections: [
       {
         title: 'What runs today',
         paragraphs: [
-          'services/ai/ is a private FastAPI service that ranks up to 50 candidate records. When EMBEDDINGGEMMA_MODEL_PATH points to a local checkpoint, the service uses EmbeddingGemma 2 retrieval embeddings alongside category, date, and location signals. Its score is uncalibrated and is not a probability or confidence that two records refer to the same object.',
-          'The model is loaded only from a configured local path; weights are not downloaded at runtime, and request embeddings are not persisted. With no model path the deterministic lexical/category/date/location fallback remains available. The Go API integration flag AI_MATCHING_ENABLED defaults to false.'
+          'services/ai/ is a private FastAPI service that evaluates up to 1,200 eligible candidate records and returns no more than five. The Go API scopes staff candidates to one institution and opposite lost/found kind, and supports optional exact-category and date-window filters. When EMBEDDINGGEMMA_MODEL_PATH points to a local checkpoint, the service combines semantic, token/character lexical, category, date, and location signals. Scores are uncalibrated ranking signals, not probabilities or confidence.',
+          'The model is loaded only from a configured local path; weights are not downloaded at runtime, and request embeddings are not persisted. With no model path the deterministic hybrid lexical/metadata fallback remains available. The Go API integration flag AI_MATCHING_ENABLED defaults to false; the validation-only Compose overlay does not enable it.'
         ],
         code: 'Public search or authorized staff request\n  → Go API sends reviewed public-safe summaries to the private Python ranker\n  → ranked suggestions + neutral overlap reasons\n  → staff independently verify; human review remains authoritative'
       },
@@ -152,15 +152,15 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Requirements before any embedding rollout',
         paragraphs: [
-          'A model checkpoint can be tested locally with fictional records, but the integrating Go feature flag must remain off until privacy, security, institutional, and operational reviews authorize a real deployment.'
+          'A model checkpoint can be tested locally with fictional records, including a 1,000-distractor synthetic benchmark, but the integrating Go feature flag must remain off until privacy, security, institutional, and operational reviews authorize a real deployment.'
         ],
         bullets: [
           'Obtain institutional approval and document an authorized purpose before using real records.',
           'Minimize and redact inputs; never embed contacts, account identifiers, private claims, evidence, or withheld verification clues.',
           'Keep retrieval tenant-scoped and enforce institution isolation in the backend and data store.',
           'Keep production matching opt-in and off by default; the local checkpoint override is an explicit opt-in for synthetic/local testing. Monitor access, retention, deletion, and model/version changes.',
-          'Evaluate false matches, language and category performance, score calibration, and human factors using approved data.',
-          'Present suggestions as leads only; people independently verify every claim and handover.'
+          'Evaluate false matches, English/Swahili/code-switch performance, typos, near-duplicates, candidate scale, category/date filters, and human factors on approved held-out data.',
+          'Present at most five suggestions as leads only; people independently verify every claim and handover. The system never auto-matches or approves claims.'
         ]
       }
     ]

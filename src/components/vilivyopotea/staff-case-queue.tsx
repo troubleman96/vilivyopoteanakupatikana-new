@@ -16,6 +16,7 @@ import {
 
 type PublicDraft = { title: string; description: string; location: string };
 type MatchState = { loading?: boolean; result?: MatchSuggestionResponse; error?: string };
+type MatchOptions = { sameCategory: boolean; maxDaysApart: '0' | '7' | '30' | '90' };
 
 const cardClass = 'rounded-2xl border border-border bg-card';
 
@@ -38,6 +39,7 @@ export function StaffCaseQueue() {
   const [reviewingId, setReviewingId] = useState('');
   const [reviewMessage, setReviewMessage] = useState<Record<string, string>>({});
   const [matches, setMatches] = useState<Record<string, MatchState>>({});
+  const [matchOptions, setMatchOptions] = useState<Record<string, MatchOptions>>({});
   const loadingCases = Boolean(
     authenticated && institutionId && loadedInstitutionId !== institutionId && !queueError
   );
@@ -153,7 +155,11 @@ export function StaffCaseQueue() {
   async function handleSuggest(item: StaffCase) {
     setMatches((current) => ({ ...current, [item.item_id]: { loading: true } }));
     try {
-      const result = await suggestStaffMatches(institutionId, item.item_id);
+      const options = matchOptions[item.item_id] ?? { sameCategory: false, maxDaysApart: '0' };
+      const result = await suggestStaffMatches(institutionId, item.item_id, {
+        category: options.sameCategory ? item.category : '',
+        max_days_apart: Number(options.maxDaysApart) as 0 | 7 | 30 | 90
+      });
       setMatches((current) => ({ ...current, [item.item_id]: { result } }));
     } catch (error) {
       setMatches((current) => ({
@@ -410,6 +416,57 @@ export function StaffCaseQueue() {
                       {matchState?.loading ? 'Ranking…' : 'Find possible matches'}
                     </button>
                   </div>
+                  <div className='flex flex-wrap items-end gap-3 rounded-lg bg-muted/40 p-3'>
+                    <label className='flex items-center gap-2 text-[10px] font-medium'>
+                      <input
+                        type='checkbox'
+                        checked={
+                          (matchOptions[item.item_id] ?? { sameCategory: false, maxDaysApart: '0' })
+                            .sameCategory
+                        }
+                        onChange={(event) =>
+                          setMatchOptions((current) => ({
+                            ...current,
+                            [item.item_id]: {
+                              ...(current[item.item_id] ?? {
+                                sameCategory: false,
+                                maxDaysApart: '0'
+                              }),
+                              sameCategory: event.target.checked
+                            }
+                          }))
+                        }
+                      />
+                      Same category only
+                    </label>
+                    <label className='block text-[10px] font-medium'>
+                      Maximum date gap
+                      <select
+                        value={
+                          (matchOptions[item.item_id] ?? { sameCategory: false, maxDaysApart: '0' })
+                            .maxDaysApart
+                        }
+                        onChange={(event) =>
+                          setMatchOptions((current) => ({
+                            ...current,
+                            [item.item_id]: {
+                              ...(current[item.item_id] ?? {
+                                sameCategory: false,
+                                maxDaysApart: '0'
+                              }),
+                              maxDaysApart: event.target.value as MatchOptions['maxDaysApart']
+                            }
+                          }))
+                        }
+                        className='form-control mt-1 min-w-36'
+                      >
+                        <option value='0'>Any / unknown date</option>
+                        <option value='7'>Within 7 days</option>
+                        <option value='30'>Within 30 days</option>
+                        <option value='90'>Within 90 days</option>
+                      </select>
+                    </label>
+                  </div>
                   {matchState?.error && (
                     <p
                       role='alert'
@@ -421,6 +478,7 @@ export function StaffCaseQueue() {
                   {matchState?.result && (
                     <div className='space-y-2'>
                       <p className='text-[10px] font-semibold text-muted-foreground'>
+                        Top-five shortlist for human review ·{' '}
                         {sourceLabel(matchState.result.source)} ·{' '}
                         {matchState.result.suggestions.length} candidate
                         {matchState.result.suggestions.length === 1 ? '' : 's'}

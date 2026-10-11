@@ -928,7 +928,7 @@ func (s *Server) callMatchService(parent context.Context, query aiRecord, candid
 	if err != nil {
 		return aiMatchResponse{}, err
 	}
-	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 60*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AIURL, "/")+"/v1/matches", bytes.NewReader(encoded))
 	if err != nil {
@@ -938,7 +938,7 @@ func (s *Server) callMatchService(parent context.Context, query aiRecord, candid
 	if s.AIToken != "" {
 		req.Header.Set("Authorization", "Bearer "+s.AIToken)
 	}
-	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
 	if err != nil {
 		return aiMatchResponse{}, err
 	}
@@ -959,12 +959,16 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ItemID string `json:"item_id"`
+		ItemID       string `json:"item_id"`
+		Category     string `json:"category"`
+		MaxDaysApart int    `json:"max_days_apart"`
 	}
-	if body(r, &input) != nil || strings.TrimSpace(input.ItemID) == "" {
-		fail(w, http.StatusBadRequest, "invalid_request", "item_id is required")
+	if body(r, &input) != nil || strings.TrimSpace(input.ItemID) == "" || !validMatchFilters(input.Category, input.MaxDaysApart) {
+		fail(w, http.StatusBadRequest, "invalid_request", "item_id and supported matching filters are required")
 		return
 	}
+	input.ItemID = strings.TrimSpace(input.ItemID)
+	input.Category = strings.TrimSpace(input.Category)
 	institutionID := r.PathValue("institutionID")
 	tx, err := s.DB.BeginInstitution(r.Context(), user.ID, institutionID)
 	if err != nil {
@@ -983,7 +987,7 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 		dbfail(w)
 		return
 	}
-	rows, err := tx.Query(r.Context(), `SELECT id::text,category,concat_ws(' ',NULLIF(public_title,''),NULLIF(public_description,'')),COALESCE(occurred_on::text,''),public_location,public_title FROM items WHERE institution_id::text=$1 AND id::text<>$2 AND kind<>$3 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') ORDER BY created_at DESC LIMIT 50`, institutionID, input.ItemID, itemKind)
+	rows, err := tx.Query(r.Context(), `SELECT id::text,category,concat_ws(' ',NULLIF(public_title,''),NULLIF(public_description,'')),COALESCE(occurred_on::text,''),public_location,public_title FROM items WHERE institution_id::text=$1 AND id::text<>$2 AND kind<>$3 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') AND ($4='' OR category=$4) AND ($5=0 OR (occurred_on IS NOT NULL AND $6<>'' AND abs(occurred_on-$6::date)<=$5)) ORDER BY CASE WHEN $6<>'' AND occurred_on IS NOT NULL THEN abs(occurred_on-$6::date) ELSE 2147483647 END, (category=$7) DESC, created_at DESC LIMIT 1200`, institutionID, input.ItemID, itemKind, input.Category, input.MaxDaysApart, query.ObservedDate, query.Category)
 	if err != nil {
 		dbfail(w)
 		return
@@ -1029,7 +1033,7 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = fallbackTx.Rollback(r.Context()) }()
 	textQuery := strings.TrimSpace(query.Category + " " + query.Description)
-	rows, err = fallbackTx.Query(r.Context(), `SELECT id::text,public_title,category FROM items WHERE institution_id::text=$2 AND id::text<>$3 AND kind<>$4 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') AND ($1='' OR to_tsvector('simple',coalesce(public_title,'')||' '||coalesce(public_description,'')||' '||coalesce(category,'')) @@ plainto_tsquery('simple',$1)) ORDER BY created_at DESC LIMIT 10`, textQuery, institutionID, input.ItemID, itemKind)
+	rows, err = fallbackTx.Query(r.Context(), `SELECT id::text,public_title,category FROM items WHERE institution_id::text=$2 AND id::text<>$3 AND kind<>$4 AND review_status='approved' AND visibility='public' AND status NOT IN ('returned','closed') AND ($1='' OR to_tsvector('simple',coalesce(public_title,'')||' '||coalesce(public_description,'')||' '||coalesce(category,'')) @@ plainto_tsquery('simple',$1)) AND ($5='' OR category=$5) AND ($6=0 OR (occurred_on IS NOT NULL AND $7<>'' AND abs(occurred_on-$7::date)<=$6)) ORDER BY created_at DESC LIMIT 5`, textQuery, institutionID, input.ItemID, itemKind, input.Category, input.MaxDaysApart, query.ObservedDate)
 	if err != nil {
 		dbfail(w)
 		return
@@ -1056,6 +1060,14 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, http.StatusOK, envelope{"data": map[string]any{"source": "text_search", "suggestions": out, "notice": "Text matches are leads only; an authorized staff reviewer must verify records independently.", "decision": "staff_review_required"}})
 }
+
+func validMatchFilters(category string, maxDaysApart int) bool {
+	if utf8.RuneCountInString(strings.TrimSpace(category)) > 80 {
+		return false
+	}
+	return maxDaysApart == 0 || maxDaysApart == 7 || maxDaysApart == 30 || maxDaysApart == 90
+}
+
 func oneOf(s string, a ...string) bool {
 	for _, x := range a {
 		if s == x {

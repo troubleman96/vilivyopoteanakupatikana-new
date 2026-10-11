@@ -24,7 +24,7 @@ services:
     expose:
       - "8090"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2).read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/readyz', timeout=2).read()"]
       interval: 10s
       timeout: 3s
       retries: 10

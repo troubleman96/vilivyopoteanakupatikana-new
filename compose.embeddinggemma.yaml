@@ -1,12 +1,9 @@
 services:
-  api:
-    environment:
-      AI_MATCHING_ENABLED: "true"
-
   ai:
     environment:
       EMBEDDINGGEMMA_MODEL_PATH: /models/embeddinggemma-2-google
       EMBEDDINGGEMMA_DEVICE: ${EMBEDDINGGEMMA_DEVICE:-cpu}
+      EMBEDDINGGEMMA_REQUIRED: "true"
     volumes:
       - type: bind
         source: ${EMBEDDINGGEMMA_MODEL_DIR:?Set EMBEDDINGGEMMA_MODEL_DIR to the local EmbeddingGemma checkpoint directory}

@@ -15,13 +15,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-MAX_BODY_BYTES = 64 * 1024
-MAX_CANDIDATES = 50
-MATCH_TIMEOUT_SECONDS = 8.0
-HEURISTIC_SIGNAL_NAME = "lexical_category_date_location"
-HEURISTIC_SIGNAL_VERSION = "v1"
-EMBEDDING_SIGNAL_NAME = "embeddinggemma2_semantic_with_metadata"
-EMBEDDING_SIGNAL_VERSION = "v1"
+MAX_BODY_BYTES = 1024 * 1024
+MAX_CANDIDATES = 1200
+MAX_SUGGESTIONS = 5
+MATCH_TIMEOUT_SECONDS = 60.0
+HEURISTIC_SIGNAL_NAME = "hybrid_lexical_category_date_location"
+HEURISTIC_SIGNAL_VERSION = "v2"
+EMBEDDING_SIGNAL_NAME = "embeddinggemma2_hybrid_lexical_metadata"
+EMBEDDING_SIGNAL_VERSION = "v2"
 
 # Contact details do not belong in matching descriptions or locations. Reject them
 # rather than attempting to scrub or retain sensitive input.
@@ -44,8 +45,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:
             # Fail closed: an explicitly requested but unusable model must not
-            # silently switch to the legacy heuristic.
+            # silently switch to the deterministic fallback.
             raise RuntimeError("Configured local EmbeddingGemma could not be loaded.") from exc
+    elif os.getenv("EMBEDDINGGEMMA_REQUIRED", "").strip().lower() == "true":
+        raise RuntimeError("EmbeddingGemma is required but no local model path was configured.")
     yield
 
 
@@ -109,7 +112,7 @@ class BoundedBodyMiddleware:
 
     @staticmethod
     async def _too_large(scope: dict[str, Any], receive: Any, send: Any) -> None:
-        response = JSONResponse(status_code=413, content={"detail": "Request body exceeds the 65536-byte limit."})
+        response = JSONResponse(status_code=413, content={"detail": "Request body exceeds the 1048576-byte limit."})
         await response(scope, receive, send)
 
 
@@ -174,12 +177,31 @@ def _tokens(text: str) -> set[str]:
     return {token.lower() for token in _WORD_RE.findall(text) if len(token) > 1}
 
 
-def _score(query: ItemRecord, candidate: ItemRecord) -> tuple[float, list[str]]:
+def _character_ngrams(text: str, size: int = 3) -> set[str]:
+    normalized = " ".join(text.lower().split())
+    if not normalized:
+        return set()
+    padded = f"  {normalized}  "
+    return {padded[index : index + size] for index in range(max(1, len(padded) - size + 1))}
+
+
+def _lexical_similarity(query: ItemRecord, candidate: ItemRecord) -> float:
+    """Language-agnostic lexical score: token overlap plus typo-tolerant character overlap."""
+    query_text = f"{query.category} {query.description}".strip()
+    candidate_text = f"{candidate.category} {candidate.description}".strip()
+    query_tokens, candidate_tokens = _tokens(query_text), _tokens(candidate_text)
+    token_union = query_tokens | candidate_tokens
+    token_score = len(query_tokens & candidate_tokens) / max(1, len(token_union))
+    query_grams, candidate_grams = _character_ngrams(query_text), _character_ngrams(candidate_text)
+    gram_union = query_grams | candidate_grams
+    gram_score = len(query_grams & candidate_grams) / max(1, len(gram_union))
+    return round(0.65 * token_score + 0.35 * gram_score, 4)
+
+
+def _metadata_score(query: ItemRecord, candidate: ItemRecord) -> tuple[float, list[str]]:
     reasons: list[str] = []
     q_category, c_category = _tokens(query.category), _tokens(candidate.category)
     category = bool(q_category and c_category and q_category & c_category)
-    q_description, c_description = _tokens(query.description), _tokens(candidate.description)
-    description = len(q_description & c_description) / max(1, len(q_description | c_description))
     q_location, c_location = _tokens(query.location), _tokens(candidate.location)
     location = bool(q_location and c_location and q_location & c_location)
     day_gap = abs((query.observed_date - candidate.observed_date).days) if query.observed_date and candidate.observed_date else None
@@ -193,18 +215,17 @@ def _score(query: ItemRecord, candidate: ItemRecord) -> tuple[float, list[str]]:
         reasons.append("Observed dates are within 7 days.")
     if location:
         reasons.append("Location terms overlap.")
-    if description > 0:
-        reasons.append("Description terms overlap.")
-
-    # Fixed weighted lexical heuristic. This is a ranking signal, not a probability.
-    score = 0.35 * float(category) + 0.20 * date_similarity + 0.20 * float(location) + 0.25 * description
-    return round(score, 4), reasons or ["No notable category, date, location, or description overlap."]
+    # Metadata is deliberately separate from lexical and vector evidence.
+    score = 0.50 * float(category) + 0.25 * date_similarity + 0.25 * float(location)
+    return round(score, 4), reasons
 
 
 def _rank(request: MatchRequest, embeddinggemma_ranker: Any | None = None) -> list[MatchSuggestion]:
     if not request.candidates:
         return []
 
+    lexical_scores = [_lexical_similarity(request.query, candidate) for candidate in request.candidates]
+    metadata = [_metadata_score(request.query, candidate) for candidate in request.candidates]
     semantic_scores = (
         embeddinggemma_ranker.similarities(request.query, request.candidates)
         if embeddinggemma_ranker is not None
@@ -212,15 +233,19 @@ def _rank(request: MatchRequest, embeddinggemma_ranker: Any | None = None) -> li
     )
     ranked: list[tuple[float, str, list[str]]] = []
     for index, candidate in enumerate(request.candidates):
-        metadata_score, reasons = _score(request.query, candidate)
+        metadata_score, reasons = metadata[index]
+        lexical_score = lexical_scores[index]
+        if lexical_score >= 0.08:
+            reasons.append("Public-safe text has lexical or character-pattern overlap.")
         if semantic_scores is None:
-            score = metadata_score
+            # Deterministic multilingual-friendly fallback; this remains a ranking aid, not proof.
+            score = round(0.70 * lexical_score + 0.30 * metadata_score, 4)
         else:
             semantic_score = semantic_scores[index]
-            # Semantic similarity leads; dates and location remain supporting
-            # signals. This is an uncalibrated ranking score, never confidence.
-            score = round(0.75 * semantic_score + 0.25 * metadata_score, 4)
-            reasons = ["Semantic text similarity surfaced this candidate.", *reasons]
+            # Hybrid lexical/vector ordering, with category/date/location as supporting
+            # signals. These weights are uncalibrated and never indicate ownership.
+            score = round(0.60 * semantic_score + 0.25 * lexical_score + 0.15 * metadata_score, 4)
+            reasons.insert(0, "Semantic text similarity contributed to this shortlist.")
         ranked.append((score, candidate.record_id, reasons))
     ranked.sort(key=lambda row: (-row[0], row[1]))
 
@@ -238,7 +263,7 @@ def _rank(request: MatchRequest, embeddinggemma_ranker: Any | None = None) -> li
             ),
             explanations=reasons,
         )
-        for index, (score, record_id, reasons) in enumerate(ranked, start=1)
+        for index, (score, record_id, reasons) in enumerate(ranked[:MAX_SUGGESTIONS], start=1)
     ]
 
 
@@ -268,9 +293,9 @@ async def readyz() -> dict[str, str]:
 
 def active_ranking() -> str:
     return (
-        "embeddinggemma2_semantic_with_metadata_v1"
+        "embeddinggemma2_hybrid_lexical_metadata_v2"
         if app.state.embeddinggemma_ranker is not None
-        else "local_deterministic_v1"
+        else "hybrid_lexical_category_date_location_v2"
     )
 
 

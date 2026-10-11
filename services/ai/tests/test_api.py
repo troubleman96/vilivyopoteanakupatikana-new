@@ -2,6 +2,7 @@ import os
 import threading
 
 import numpy as np
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -32,7 +33,7 @@ def record(record_id, *, category="phone", description="black android phone", ob
 
 def test_health_and_readiness():
     assert client.get("/healthz").json() == {"status": "ok"}
-    assert client.get("/readyz").json() == {"status": "ready", "ranking": "local_deterministic_v1"}
+    assert client.get("/readyz").json() == {"status": "ready", "ranking": "hybrid_lexical_category_date_location_v2"}
 
 
 def test_match_ranks_overlap_with_neutral_versioned_signal():
@@ -47,11 +48,11 @@ def test_match_ranks_overlap_with_neutral_versioned_signal():
     result = response.json()
     assert [item["candidate_id"] for item in result["suggestions"]] == ["more-similar", "less-similar"]
     signal = result["suggestions"][0]["signal"]
-    assert signal["name"] == "lexical_category_date_location"
-    assert signal["version"] == "v1"
+    assert signal["name"] == "hybrid_lexical_category_date_location"
+    assert signal["version"] == "v2"
     assert signal["interpretation"] == "uncalibrated_assistive_suggestion_only"
     assert 0 <= signal["score"] <= 1
-    assert result["ranking"] == "local_deterministic_v1"
+    assert result["ranking"] == "hybrid_lexical_category_date_location_v2"
     assert all("Category terms overlap." in result["suggestions"][0]["explanations"] for _ in [0])
     assert "ownership" in result["notice"]
 
@@ -120,10 +121,45 @@ def test_configured_embeddinggemma_ranker_controls_order_and_signal(monkeypatch)
     assert response.status_code == 200
     result = response.json()["suggestions"]
     assert [item["candidate_id"] for item in result] == ["second", "first"]
-    assert response.json()["ranking"] == "embeddinggemma2_semantic_with_metadata_v1"
-    assert result[0]["signal"]["name"] == "embeddinggemma2_semantic_with_metadata"
+    assert response.json()["ranking"] == "embeddinggemma2_hybrid_lexical_metadata_v2"
+    assert result[0]["signal"]["name"] == "embeddinggemma2_hybrid_lexical_metadata"
     assert result[0]["signal"]["interpretation"] == "uncalibrated_assistive_suggestion_only"
-    assert "Semantic text similarity surfaced this candidate." in result[0]["explanations"]
+    assert "Semantic text similarity contributed to this shortlist." in result[0]["explanations"]
+
+
+def test_shortlist_is_limited_to_five_with_contiguous_ranks():
+    response = client.post(
+        "/v1/matches",
+        json={"query": BASE_QUERY, "candidates": [record(f"candidate-{index:02d}") for index in range(12)]},
+    )
+    assert response.status_code == 200
+    suggestions = response.json()["suggestions"]
+    assert len(suggestions) == 5
+    assert [item["rank"] for item in suggestions] == [1, 2, 3, 4, 5]
+
+
+def test_character_overlap_retrieves_simple_typos_in_deterministic_fallback():
+    response = client.post(
+        "/v1/matches",
+        json={
+            "query": {**BASE_QUERY, "description": "black android phone with cracked screeen"},
+            "candidates": [
+                record("typo-near", description="black android phone with cracked screen"),
+                record("unrelated", category="bag", description="blue canvas tote", location="Example University cafe"),
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["suggestions"][0]["candidate_id"] == "typo-near"
+
+
+def test_one_thousand_candidates_are_accepted_and_return_only_five():
+    response = client.post(
+        "/v1/matches",
+        json={"query": BASE_QUERY, "candidates": [record(f"candidate-{index:04d}") for index in range(1000)]},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["suggestions"]) == 5
 
 
 def test_pii_is_rejected_without_echoing_input():
@@ -144,7 +180,7 @@ def test_invalid_dates_extra_fields_and_candidate_limit_are_rejected_safely():
     assert response.status_code == 422
     assert "Synthetic Person" not in response.text
 
-    response = client.post("/v1/matches", json={"query": BASE_QUERY, "candidates": [record(str(i)) for i in range(51)]})
+    response = client.post("/v1/matches", json={"query": BASE_QUERY, "candidates": [record(str(i)) for i in range(1201)]})
     assert response.status_code == 422
 
 
@@ -158,6 +194,14 @@ def test_optional_bearer_token_when_configured(monkeypatch):
 
 
 def test_oversized_body_rejected():
-    response = client.post("/v1/matches", content=b" " * (64 * 1024 + 1), headers={"Content-Type": "application/json"})
+    response = client.post("/v1/matches", content=b" " * (1024 * 1024 + 1), headers={"Content-Type": "application/json"})
     assert response.status_code == 413
-    assert response.json() == {"detail": "Request body exceeds the 65536-byte limit."}
+    assert response.json() == {"detail": "Request body exceeds the 1048576-byte limit."}
+
+
+def test_required_model_fails_startup_without_local_checkpoint(monkeypatch):
+    monkeypatch.setenv("EMBEDDINGGEMMA_REQUIRED", "true")
+    monkeypatch.delenv("EMBEDDINGGEMMA_MODEL_PATH", raising=False)
+    with pytest.raises(RuntimeError, match="EmbeddingGemma is required"):
+        with TestClient(app):
+            pass

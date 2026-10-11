@@ -135,3 +135,22 @@ func TestPublicSummaryRejectsContactDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchFiltersAreBoundedAndAllowListed(t *testing.T) {
+	for _, test := range []struct {
+		category string
+		days     int
+		want     bool
+	}{
+		{category: "", days: 0, want: true},
+		{category: "simu", days: 7, want: true},
+		{category: "category", days: 90, want: true},
+		{category: strings.Repeat("x", 81), days: 0, want: false},
+		{category: "bag", days: 8, want: false},
+		{category: "bag", days: -7, want: false},
+	} {
+		if got := validMatchFilters(test.category, test.days); got != test.want {
+			t.Errorf("validMatchFilters(%q, %d) = %t, want %t", test.category, test.days, got, test.want)
+		}
+	}
+}

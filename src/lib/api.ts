@@ -108,6 +108,11 @@ export type MatchSuggestionResponse = {
   notice?: string;
 };
 
+export type StaffMatchFilters = {
+  category?: string;
+  max_days_apart?: 0 | 7 | 30 | 90;
+};
+
 export type InstitutionStats = { open_cases: number; open_claims: number };
 export type PlatformStats = { institutions: number; public_items: number; open_cases: number };
 
@@ -391,11 +396,12 @@ export async function reviewStaffItem(
 
 export async function suggestStaffMatches(
   institutionId: string,
-  itemId: string
+  itemId: string,
+  filters: StaffMatchFilters = {}
 ): Promise<MatchSuggestionResponse> {
   const data = await requestData<unknown>(
     `/staff/institutions/${encodeURIComponent(institutionId)}/matches/suggest`,
-    { method: 'POST', body: { item_id: itemId } }
+    { method: 'POST', body: { item_id: itemId, ...filters } }
   );
   if (!isRecord(data) || !Array.isArray(data.suggestions)) {
     throw new Error('The API returned an invalid match suggestion response.');
