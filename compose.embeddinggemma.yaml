@@ -1,0 +1,10 @@
+services:
+  ai:
+    environment:
+      EMBEDDINGGEMMA_MODEL_PATH: /models/embeddinggemma-2-google
+      EMBEDDINGGEMMA_DEVICE: ${EMBEDDINGGEMMA_DEVICE:-cpu}
+    volumes:
+      - type: bind
+        source: ${EMBEDDINGGEMMA_MODEL_DIR:?Set EMBEDDINGGEMMA_MODEL_DIR to the local EmbeddingGemma checkpoint directory}
+        target: /models/embeddinggemma-2-google
+        read_only: true

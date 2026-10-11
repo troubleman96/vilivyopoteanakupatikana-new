@@ -1,6 +1,8 @@
 # Internal AI matching suggestions
 
-Small FastAPI service for **ranking possible lost-and-found record matches**. It is not an identity or ownership verifier, a claim adjudicator, or a source of calibrated probabilities. Uses a deterministic local lexical/category/date/location heuristic only; no external model calls, face recognition, or embedding checkpoint is used or downloaded.
+Private FastAPI service for **ranking possible lost-and-found record matches**. When `EMBEDDINGGEMMA_MODEL_PATH` points to a local EmbeddingGemma 2 checkpoint, it uses semantic similarity with category/date/location signals. If unset, it uses the deterministic lexical/category/date/location fallback. A configured but invalid path fails startup; weights are never downloaded.
+
+The model is loaded once at startup, uses the checkpoint's asymmetric `SearchQuery` and `Document` prompts, loads text weights only, and keeps request embeddings in memory only for ranking. No vector database, persistent embedding store, external model call, image inspection, or ownership decision is involved.
 
 ## API
 
@@ -31,7 +33,7 @@ Example request (synthetic data and a generic institution label only):
 }
 ```
 
-Each suggestion includes a stable rank, a `lexical_category_date_location` signal at version `v1`, and short neutral overlap explanations. The numeric score is an **uncalibrated heuristic for ordering candidates**, not a probability or confidence claim. Empty candidates return an empty suggestions list. Validation is strict (`extra` fields are rejected), text is length-limited, contact-like email/phone text is rejected, candidate count is capped at 50, and the entire request body is capped at 64 KiB. Validation errors do not echo input. Matching has a 2-second async timeout; oversized bodies and timeout errors are bounded/safe.
+When EmbeddingGemma is loaded, each signal is named `embeddinggemma2_semantic_with_metadata` at version `v1`; otherwise the fallback reports `lexical_category_date_location` at version `v1`. Scores are bounded, uncalibrated ordering signals—not probabilities or confidence. Explanations are neutral overlap notes. Suggestions never establish identity or ownership, approve/reject claims, or disclose withheld evidence; human review remains authoritative. Empty candidates return an empty suggestions list. Validation is strict (`extra` fields are rejected), text is length-limited, contact-like email/phone text is rejected, candidate count is capped at 50, and the entire request body is capped at 64 KiB. Validation errors do not echo input. Blank dates from the Go API are treated as missing. Matching has an 8-second bounded timeout.
 
 ## Privacy and deployment
 
@@ -41,17 +43,15 @@ Each suggestion includes a stable rank, a `lexical_category_date_location` signa
 - Suggestions must not verify identity/ownership, disclose private evidence, decide or reject claims, or be presented as proof. A human-controlled workflow must independently review records and claims.
 - Institutional separation, authentication/authorization of callers, storage, retention, audit policy, and rate limits belong to the integrating backend and private network; this service does not provide tenant-aware storage.
 - **Feature flag:** keep matching disabled by default in the integrating product; enable only behind an explicit backend feature flag after privacy/security review and authorized pilot approval. DIT is only a proposed pilot, not approved. Use generic `Example University` labels in synthetic tests and examples.
-- No model checkpoint is loaded or downloaded. Any future model use requires separate approval and privacy review.
+- Keep embeddings transient; do not embed contacts, account identifiers, private claims, evidence, or withheld verification clues. Keep the integrating Go API feature flag `AI_MATCHING_ENABLED=false` by default. Use of real records requires separate privacy, security, institutional, and operational review and an authorized pilot.
 
 ## Run and test
 
 ```sh
-cd /workspace/vilivyopoteanakupatikana.com/services/ai
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-pytest
-PORT=8090 uvicorn main:app --host 0.0.0.0 --port "${PORT:-8090}" --no-access-log
+python3 -m pip install -r services/ai/requirements.txt
+cd services/ai
+EMBEDDINGGEMMA_MODEL_PATH=/workspace/embeddinggemma-2-google \
+  uvicorn main:app --host 127.0.0.1 --port 18090 --no-access-log
 ```
 
-The container listens on `0.0.0.0:${PORT:-8090}` (default `8090`). Internal caller example: `curl -s http://localhost:8090/readyz`. If a token is configured, send it only from the trusted backend. Do not enable Uvicorn access logs or application request-body logging in production.
+In another terminal, check `/readyz` and submit the fictional API example above to `http://127.0.0.1:18090/v1/matches`. The service binds to loopback in this test command and must remain internal-only in deployments; do not publish its port directly to the internet. For container testing, layer `compose.embeddinggemma.yaml` over the root Compose file and set `EMBEDDINGGEMMA_MODEL_DIR`; the override mounts weights read-only and does not publish an AI host port. If a token is configured, send it only from the trusted backend. Do not enable Uvicorn access logs or request-body logging in production.

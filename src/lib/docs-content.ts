@@ -126,13 +126,13 @@ export const documentationPages: Record<string, DocumentationPage> = {
     title: 'AI suggestions and embeddings',
     eyebrow: 'PYTHON AI SERVICE',
     summary:
-      'The current matching implementation is a deterministic lexical heuristic. Embeddings and EmbeddingGemma are documented as a possible future evaluation—not as an active model or dependency in this repository.',
+      'The private Python matcher can use a local EmbeddingGemma 2 checkpoint for semantic candidate ranking, with a deterministic fallback when no model path is configured.',
     sections: [
       {
         title: 'What runs today',
         paragraphs: [
-          'services/ai/ is a private FastAPI service that ranks up to 50 candidate records using lexical, category, date, and location signals. Its score is an uncalibrated ordering heuristic, not a probability or confidence that two records refer to the same object.',
-          'The current service does not load or download a model checkpoint, create embeddings, use a vector database, call an external AI provider, inspect images, or make an ownership decision. The integration flag AI_MATCHING_ENABLED defaults to false.'
+          'services/ai/ is a private FastAPI service that ranks up to 50 candidate records. When EMBEDDINGGEMMA_MODEL_PATH points to a local checkpoint, the service uses EmbeddingGemma 2 retrieval embeddings alongside category, date, and location signals. Its score is uncalibrated and is not a probability or confidence that two records refer to the same object.',
+          'The model is loaded only from a configured local path; weights are not downloaded at runtime, and request embeddings are not persisted. With no model path the deterministic lexical/category/date/location fallback remains available. The Go API integration flag AI_MATCHING_ENABLED defaults to false.'
         ],
         code: 'Go API (authorized staff request)\n  → private Python ranker (optional)\n  → ranked suggestions + neutral overlap reasons\n  → staff independently verify; human review remains authoritative'
       },
@@ -140,7 +140,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
         title: 'Embeddings, in brief',
         paragraphs: [
           'An embedding is a numeric vector produced from content. A retrieval system can compare vectors—often with cosine similarity—to find semantically related text even when the wording differs. Similarity is a retrieval signal, not proof, calibrated confidence, or a decision.',
-          'Google’s EmbeddingGemma family is one potential model family to evaluate for embedding workloads. No EmbeddingGemma weights, model calls, generated vectors, or model-specific runtime are present here. Review the exact model version, terms, operational footprint, and language performance before considering adoption.'
+          'This repository integrates the local EmbeddingGemma 2 text checkpoint using the model’s asymmetric SearchQuery and Document prompts. Vision/audio paths and external model calls are not used by the lost-and-found matcher. Review the exact checkpoint, terms, operational footprint, and language performance before using real records.'
         ],
         links: [
           {
@@ -152,7 +152,7 @@ export const documentationPages: Record<string, DocumentationPage> = {
       {
         title: 'Requirements before any embedding rollout',
         paragraphs: [
-          'Do not turn on a future embedding path by changing a UI setting alone. It would require a separate privacy, security, institutional, and operational review.'
+          'A model checkpoint can be tested locally with fictional records, but the integrating Go feature flag must remain off until privacy, security, institutional, and operational reviews authorize a real deployment.'
         ],
         bullets: [
           'Obtain institutional approval and document an authorized purpose before using real records.',

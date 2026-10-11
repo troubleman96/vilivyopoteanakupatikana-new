@@ -641,7 +641,7 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 	if s.AIMatchingEnabled && s.AIURL != "" {
 		encoded, marshalErr := json.Marshal(aiMatchRequest{Query: query, Candidates: candidates})
 		if marshalErr == nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 			defer cancel()
 			req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AIURL, "/")+"/v1/matches", bytes.NewReader(encoded))
 			if requestErr == nil {
@@ -649,7 +649,7 @@ func (s *Server) matchSuggestions(w http.ResponseWriter, r *http.Request) {
 				if s.AIToken != "" {
 					req.Header.Set("Authorization", "Bearer "+s.AIToken)
 				}
-				resp, requestErr := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+				resp, requestErr := (&http.Client{Timeout: 8 * time.Second}).Do(req)
 				if requestErr == nil {
 					defer resp.Body.Close()
 					if resp.StatusCode >= 200 && resp.StatusCode < 300 {

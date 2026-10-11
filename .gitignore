@@ -46,6 +46,7 @@ next-env.d.ts
 .env.sentry-build-plugin
 
 # Python test/runtime artifacts
+**/build/
 __pycache__/
 *.py[cod]
 .pytest_cache/

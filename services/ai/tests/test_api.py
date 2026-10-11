@@ -1,8 +1,12 @@
 import os
+import threading
+
+import numpy as np
 
 from fastapi.testclient import TestClient
 
-from main import app
+from embeddinggemma import EmbeddingGemmaRanker
+from main import ItemRecord, app
 
 client = TestClient(app)
 
@@ -65,6 +69,59 @@ def test_missing_observed_date_is_neutral_not_rejected():
     result = response.json()["suggestions"][0]
     assert result["candidate_id"] == "found-01"
     assert all("date" not in reason.lower() for reason in result["explanations"])
+
+
+def test_empty_observed_date_from_go_api_is_treated_as_missing():
+    query = {**BASE_QUERY, "observed_date": ""}
+    candidate = {**record("found-02"), "observed_date": ""}
+    response = client.post("/v1/matches", json={"query": query, "candidates": [candidate]})
+    assert response.status_code == 200
+    assert all("date" not in reason.lower() for reason in response.json()["suggestions"][0]["explanations"])
+
+
+def test_embeddinggemma_ranker_uses_asymmetric_retrieval_prompts():
+    class FakeModel:
+        def __init__(self):
+            self.prompts = []
+
+        def encode(self, texts, *, prompt_name, **kwargs):
+            self.prompts.append((texts, prompt_name, kwargs))
+            if isinstance(texts, list):
+                return np.array([[1.0, 0.0], [0.0, 1.0]])
+            return np.array([1.0, 0.0])
+
+    ranker = EmbeddingGemmaRanker.__new__(EmbeddingGemmaRanker)
+    ranker.model = FakeModel()
+    ranker.batch_size = 16
+    ranker._encode_lock = threading.Lock()
+    scores = ranker.similarities(
+        ItemRecord.model_validate(BASE_QUERY),
+        [ItemRecord.model_validate(record("related")), ItemRecord.model_validate(record("other"))],
+    )
+
+    assert scores == [1.0, 0.0]
+    assert [prompt[1] for prompt in ranker.model.prompts] == ["SearchQuery", "Document"]
+    assert ranker.model.prompts[0][2]["normalize_embeddings"] is True
+    assert len(ranker.model.prompts[1][0]) == 2
+
+
+def test_configured_embeddinggemma_ranker_controls_order_and_signal(monkeypatch):
+    class FakeRanker:
+        def similarities(self, query, candidates):
+            return [0.1, 0.9]
+
+    monkeypatch.setattr(app.state, "embeddinggemma_ranker", FakeRanker())
+    response = client.post("/v1/matches", json={
+        "query": BASE_QUERY,
+        "candidates": [record("first"), record("second", category="bag", description="blue canvas tote", location="Example University cafe")],
+    })
+
+    assert response.status_code == 200
+    result = response.json()["suggestions"]
+    assert [item["candidate_id"] for item in result] == ["second", "first"]
+    assert result[0]["signal"]["name"] == "embeddinggemma2_semantic_with_metadata"
+    assert result[0]["signal"]["interpretation"] == "uncalibrated_assistive_suggestion_only"
+    assert "Semantic text similarity surfaced this candidate." in result[0]["explanations"]
 
 
 def test_pii_is_rejected_without_echoing_input():

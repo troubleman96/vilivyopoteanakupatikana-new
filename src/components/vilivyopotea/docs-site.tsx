@@ -132,12 +132,12 @@ export function DocumentationIndex() {
       </section>
       <section className='rounded-2xl border border-amber-300/60 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30'>
         <p className='text-xs font-bold text-amber-950 dark:text-amber-100'>
-          Important: embeddings are not active today
+          Important: local model, assistive suggestions only
         </p>
         <p className='mt-2 text-xs leading-6 text-amber-900 dark:text-amber-100/80'>
-          The Python service currently ranks suggestions with deterministic lexical, category, date,
-          and location signals. EmbeddingGemma is a possible future evaluation only; no model or
-          vector store is connected.
+          The private Python service can load EmbeddingGemma 2 from a local checkpoint and combine
+          semantic similarity with category, date, and location signals. The Go API feature flag
+          stays off by default; suggestions never verify ownership or decide claims.
         </p>
       </section>
     </div>

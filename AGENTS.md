@@ -17,7 +17,7 @@ This file provides essential information for AI coding agents working on this pr
 - **Containerization**: Docker (Node.js & Bun Dockerfiles)
 - **Package Manager**: pnpm 11 (see `packageManager` in `package.json`)
 
-The monorepo contains one Next.js app with a public landing page, individual user routes, institution/security-staff routes, a system-admin preview, and a `/docs` developer site; the Go API in `services/api/`; the private Python matching service in `services/ai/`; and a read-only FastMCP adapter in `services/mcp/`. Use fictional demo data only; do not imply that any university has approved a pilot. Supabase identity and API/database checks—not the demo role selector—enforce authorization. The AI ranker is a lexical heuristic today; embeddings and EmbeddingGemma are not active.
+The monorepo contains one Next.js app with a public landing page, individual user routes, institution/security-staff routes, a system-admin preview, and a `/docs` developer site; the Go API in `services/api/`; the private Python matching service in `services/ai/`; and a read-only FastMCP adapter in `services/mcp/`. Use fictional demo data only; do not imply that any university has approved a pilot. Supabase identity and API/database checks—not the demo role selector—enforce authorization. The AI service supports a configured local EmbeddingGemma 2 checkpoint or a deterministic fallback; the Go API matching feature remains disabled by default.
 
 ---
 

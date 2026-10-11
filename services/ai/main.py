@@ -6,8 +6,9 @@ import asyncio
 import hmac
 import os
 import re
+from contextlib import asynccontextmanager
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -16,9 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MAX_BODY_BYTES = 64 * 1024
 MAX_CANDIDATES = 50
-MATCH_TIMEOUT_SECONDS = 2.0
-SIGNAL_NAME = "lexical_category_date_location"
-SIGNAL_VERSION = "v1"
+MATCH_TIMEOUT_SECONDS = 8.0
+HEURISTIC_SIGNAL_NAME = "lexical_category_date_location"
+HEURISTIC_SIGNAL_VERSION = "v1"
+EMBEDDING_SIGNAL_NAME = "embeddinggemma2_semantic_with_metadata"
+EMBEDDING_SIGNAL_VERSION = "v1"
 
 # Contact details do not belong in matching descriptions or locations. Reject them
 # rather than attempting to scrub or retain sensitive input.
@@ -26,7 +29,32 @@ _EMAIL_RE = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
 _PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d .()/-]{7,}\d)(?!\w)")
 _WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
-app = FastAPI(title="Lost-and-Found Matching Suggestions", version="1.0.0")
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Load the explicitly configured local checkpoint once at service startup."""
+    application.state.embeddinggemma_ranker = None
+    model_path = os.getenv("EMBEDDINGGEMMA_MODEL_PATH", "").strip()
+    if model_path:
+        from embeddinggemma import EmbeddingGemmaRanker
+
+        device = os.getenv("EMBEDDINGGEMMA_DEVICE", "cpu").strip() or "cpu"
+        try:
+            application.state.embeddinggemma_ranker = await asyncio.to_thread(
+                EmbeddingGemmaRanker, model_path, device
+            )
+        except Exception as exc:
+            # Fail closed: an explicitly requested but unusable model must not
+            # silently switch to the legacy heuristic.
+            raise RuntimeError("Configured local EmbeddingGemma could not be loaded.") from exc
+    yield
+
+
+app = FastAPI(
+    title="Lost-and-Found Matching Suggestions",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.state.embeddinggemma_ranker = None
 
 
 class BoundedBodyMiddleware:
@@ -108,6 +136,12 @@ class ItemRecord(BaseModel):
     def validate_text(cls, value: str) -> str:
         return _reject_contact_details(value)
 
+    @field_validator("observed_date", mode="before")
+    @classmethod
+    def normalize_empty_date(cls, value: Any) -> Any:
+        # The Go API serializes unknown dates as an empty string.
+        return None if value == "" else value
+
 
 class MatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -166,19 +200,38 @@ def _score(query: ItemRecord, candidate: ItemRecord) -> tuple[float, list[str]]:
     return round(score, 4), reasons or ["No notable category, date, location, or description overlap."]
 
 
-def _rank(request: MatchRequest) -> list[MatchSuggestion]:
+def _rank(request: MatchRequest, embeddinggemma_ranker: Any | None = None) -> list[MatchSuggestion]:
+    if not request.candidates:
+        return []
+
+    semantic_scores = (
+        embeddinggemma_ranker.similarities(request.query, request.candidates)
+        if embeddinggemma_ranker is not None
+        else None
+    )
     ranked: list[tuple[float, str, list[str]]] = []
-    for candidate in request.candidates:
-        score, reasons = _score(request.query, candidate)
+    for index, candidate in enumerate(request.candidates):
+        metadata_score, reasons = _score(request.query, candidate)
+        if semantic_scores is None:
+            score = metadata_score
+        else:
+            semantic_score = semantic_scores[index]
+            # Semantic similarity leads; dates and location remain supporting
+            # signals. This is an uncalibrated ranking score, never confidence.
+            score = round(0.75 * semantic_score + 0.25 * metadata_score, 4)
+            reasons = ["Semantic text similarity surfaced this candidate.", *reasons]
         ranked.append((score, candidate.record_id, reasons))
     ranked.sort(key=lambda row: (-row[0], row[1]))
+
+    signal_name = EMBEDDING_SIGNAL_NAME if semantic_scores is not None else HEURISTIC_SIGNAL_NAME
+    signal_version = EMBEDDING_SIGNAL_VERSION if semantic_scores is not None else HEURISTIC_SIGNAL_VERSION
     return [
         MatchSuggestion(
             candidate_id=record_id,
             rank=index,
             signal=SimilaritySignal(
-                name=SIGNAL_NAME,
-                version=SIGNAL_VERSION,
+                name=signal_name,
+                version=signal_version,
                 score=score,
                 interpretation="uncalibrated_assistive_suggestion_only",
             ),
@@ -209,14 +262,24 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/readyz")
 async def readyz() -> dict[str, str]:
-    return {"status": "ready", "ranking": "local_deterministic_v1"}
+    ranking = (
+        "embeddinggemma2_semantic_with_metadata_v1"
+        if app.state.embeddinggemma_ranker is not None
+        else "local_deterministic_v1"
+    )
+    return {"status": "ready", "ranking": ranking}
 
 
 @app.post("/v1/matches", response_model=MatchResponse, dependencies=[Depends(require_service_token)])
 async def matches(payload: MatchRequest) -> MatchResponse:
     try:
-        suggestions = await asyncio.wait_for(asyncio.to_thread(_rank, payload), timeout=MATCH_TIMEOUT_SECONDS)
+        suggestions = await asyncio.wait_for(
+            asyncio.to_thread(_rank, payload, app.state.embeddinggemma_ranker),
+            timeout=MATCH_TIMEOUT_SECONDS,
+        )
     except TimeoutError as exc:
+        raise HTTPException(status_code=503, detail="Matching is temporarily unavailable.") from exc
+    except Exception as exc:
         raise HTTPException(status_code=503, detail="Matching is temporarily unavailable.") from exc
     return MatchResponse(
         suggestions=suggestions,
