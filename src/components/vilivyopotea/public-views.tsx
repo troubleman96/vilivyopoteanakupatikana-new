@@ -7,6 +7,7 @@ import { DemoNotice, ItemCard, PageHeading, StatusPill } from './primitives';
 import {
   fetchPublicInstitutions,
   isApiConfigured,
+  isDemoModeEnabled,
   searchPublicItems,
   submitPrivateClaim,
   submitReport,
@@ -33,7 +34,7 @@ const demoInstitutions: PublicInstitution[] = [
 
 const cardClass = 'rounded-2xl border border-border bg-card';
 
-type ListingSource = 'api' | 'demo' | 'fallback';
+type ListingSource = 'api' | 'demo' | 'unavailable';
 
 function sourceNotice(source: ListingSource, ranking: SearchRankingSource | null) {
   if (source === 'api' && ranking === 'embeddinggemma')
@@ -41,13 +42,15 @@ function sourceNotice(source: ListingSource, ranking: SearchRankingSource | null
   if (source === 'api' && ranking === 'assistive_ai')
     return 'Local assistive ranking · reviewed public summaries only';
   if (source === 'api') return 'Text search · reviewed public summaries only';
-  if (source === 'fallback') return 'API unavailable · showing fictional sample listings only';
-  return 'Synthetic demo listings · no real records';
+  if (source === 'demo') return 'Synthetic demo listings · no real records';
+  return isApiConfigured()
+    ? 'Live API unavailable · no sample data shown'
+    : 'Live API not configured · sample data disabled';
 }
 
 export function PublicSearchView() {
-  const [items, setItems] = useState<LostFoundItem[]>(demoItems);
-  const [source, setSource] = useState<ListingSource>('demo');
+  const [items, setItems] = useState<LostFoundItem[]>([]);
+  const [source, setSource] = useState<ListingSource>('unavailable');
   const [ranking, setRanking] = useState<SearchRankingSource | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState('');
@@ -65,9 +68,15 @@ export function PublicSearchView() {
       void (async () => {
         if (!isApiConfigured()) {
           if (mounted) {
-            setItems(demoItems);
-            setSource('demo');
+            const demoEnabled = isDemoModeEnabled();
+            setItems(demoEnabled ? demoItems : []);
+            setSource(demoEnabled ? 'demo' : 'unavailable');
             setRanking(null);
+            setLoadMessage(
+              demoEnabled
+                ? ''
+                : 'The live API is not configured. Synthetic preview data is disabled.'
+            );
             setLoading(false);
           }
           return;
@@ -93,11 +102,11 @@ export function PublicSearchView() {
           }
         } catch {
           if (mounted) {
-            setItems(demoItems);
-            setSource('fallback');
+            setItems([]);
+            setSource('unavailable');
             setRanking(null);
             setLoadMessage(
-              'The public API could not be reached. These examples are fictional and were not returned by the service.'
+              'The live API could not be reached. No synthetic records are displayed.'
             );
           }
         } finally {
@@ -150,7 +159,9 @@ export function PublicSearchView() {
     }
     if (source !== 'api') {
       setClaimMessage(
-        'Demo only: this sample claim stays in this browser preview and is not sent anywhere.'
+        source === 'demo'
+          ? 'Demo only: this sample claim stays in this browser preview and is not sent anywhere.'
+          : 'Live claims are unavailable. No request was sent.'
       );
       return;
     }
@@ -293,7 +304,9 @@ export function PublicSearchView() {
                   ? 'Submitting…'
                   : source === 'api'
                     ? 'Submit private claim'
-                    : 'Save demo claim'}
+                    : source === 'demo'
+                      ? 'Save demo claim'
+                      : 'Live claims unavailable'}
               </button>
               {source === 'api' && (
                 <Link
@@ -362,15 +375,15 @@ export function PublicSearchView() {
       <DemoNotice>
         Only reviewed, public-safe summaries are shown. Personal contact details, claims and
         verification evidence stay private.{' '}
-        {source !== 'api' && 'Current cards are fictional demo data.'}
+        {source === 'demo' && 'Current cards are fictional demo data.'}
       </DemoNotice>
     </div>
   );
 }
 
 export function PublicReportView() {
-  const [institutions, setInstitutions] = useState<PublicInstitution[]>(demoInstitutions);
-  const [institutionSource, setInstitutionSource] = useState<ListingSource>('demo');
+  const [institutions, setInstitutions] = useState<PublicInstitution[]>([]);
+  const [institutionSource, setInstitutionSource] = useState<ListingSource>('unavailable');
   const [loadingInstitutions, setLoadingInstitutions] = useState(true);
   const [form, setForm] = useState<CreateReportInput>({
     institution_id: '',
@@ -393,12 +406,18 @@ export function PublicReportView() {
     async function loadInstitutions() {
       if (!isApiConfigured()) {
         if (mounted) {
-          setInstitutions(demoInstitutions);
-          setInstitutionSource('demo');
-          setForm((current) => ({
-            ...current,
-            institution_id: current.institution_id || demoInstitutions[0].id
-          }));
+          if (isDemoModeEnabled()) {
+            setInstitutions(demoInstitutions);
+            setInstitutionSource('demo');
+            setForm((current) => ({
+              ...current,
+              institution_id: current.institution_id || demoInstitutions[0].id
+            }));
+          } else {
+            setInstitutions([]);
+            setInstitutionSource('unavailable');
+            setError('The live API is not configured. Synthetic institution data is disabled.');
+          }
           setLoadingInstitutions(false);
         }
         return;
@@ -415,11 +434,9 @@ export function PublicReportView() {
         }
       } catch {
         if (mounted) {
-          setInstitutions(demoInstitutions);
-          setInstitutionSource('fallback');
-          setError(
-            'The institution list could not be loaded. No report can be sent until the API is reachable.'
-          );
+          setInstitutions([]);
+          setInstitutionSource('unavailable');
+          setError('The live institution list could not be loaded. No report was submitted.');
         }
       } finally {
         if (mounted) setLoadingInstitutions(false);
@@ -440,7 +457,11 @@ export function PublicReportView() {
     setError('');
     setNeedsSignIn(false);
     if (!isApiConfigured()) {
-      setResult({ id: `DEMO-${new Date().getFullYear()}-LOCAL`, demo: true });
+      if (isDemoModeEnabled()) {
+        setResult({ id: `DEMO-${new Date().getFullYear()}-LOCAL`, demo: true });
+      } else {
+        setError('The live API is not configured. This report was not submitted.');
+      }
       return;
     }
     if (institutionSource !== 'api') {
@@ -523,7 +544,7 @@ export function PublicReportView() {
         title={`Report a ${form.kind === 'found' ? 'found' : 'missing'} item`}
         description='Share enough for staff to review, but keep distinctive proof and contact details private.'
       />
-      {institutionSource === 'fallback' && (
+      {institutionSource === 'unavailable' && error && (
         <div
           role='alert'
           className='rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100'
@@ -722,7 +743,10 @@ export function PublicReportView() {
               <button
                 type='submit'
                 disabled={
-                  busy || loadingInstitutions || (isApiConfigured() && institutionSource !== 'api')
+                  busy ||
+                  loadingInstitutions ||
+                  (!isApiConfigured() && !isDemoModeEnabled()) ||
+                  (isApiConfigured() && institutionSource !== 'api')
                 }
                 className='rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-50'
               >
@@ -730,7 +754,9 @@ export function PublicReportView() {
                   ? 'Submitting…'
                   : isApiConfigured()
                     ? 'Submit report privately'
-                    : 'Save demo report locally'}
+                    : isDemoModeEnabled()
+                      ? 'Save demo report locally'
+                      : 'Live reporting unavailable'}
               </button>
             )}
             <span className='self-center text-[10px] text-muted-foreground'>
@@ -753,7 +779,7 @@ export function PublicReportView() {
               .
             </p>
           )}
-          {error && institutionSource !== 'fallback' && (
+          {error && (
             <p
               role='alert'
               className='rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100'
@@ -768,7 +794,9 @@ export function PublicReportView() {
             <p className='mt-1 text-[10px] text-muted-foreground'>
               {institutionSource === 'api'
                 ? 'Live institution directory'
-                : 'Synthetic preview · no live institution selected'}
+                : institutionSource === 'demo'
+                  ? 'Synthetic preview · no live institution selected'
+                  : 'Live institution data unavailable'}
             </p>
             <ul className='mt-4 space-y-3 text-[11px] leading-5 text-muted-foreground'>
               <li>Share only a general description and approximate area.</li>

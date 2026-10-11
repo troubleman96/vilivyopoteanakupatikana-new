@@ -38,7 +38,7 @@ func main() {
 		Pool:         authPool,
 		PublicAppURL: c.PublicAppURL,
 		CookieSecure: true,
-	}, c.DemoReads, c.AIServiceURL)
+	}, c.AIServiceURL)
 	h.AIToken = c.AIServiceToken
 	h.AIMatchingEnabled = c.AIMatchingEnabled
 	h.CORSAllowedOrigins = c.CORSAllowedOrigins

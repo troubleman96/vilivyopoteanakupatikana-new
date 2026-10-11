@@ -1,5 +1,10 @@
 import { InstitutionOverview } from '@/components/vilivyopotea/views';
+import { DemoPreviewGate } from '@/components/vilivyopotea/demo-preview-gate';
 
 export default function InstitutionPage() {
-  return <InstitutionOverview />;
+  return (
+    <DemoPreviewGate>
+      <InstitutionOverview />
+    </DemoPreviewGate>
+  );
 }

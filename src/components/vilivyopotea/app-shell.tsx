@@ -37,10 +37,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Header />
           <main className='flex min-h-0 flex-1 flex-col'>
             <div className='mx-auto w-full max-w-screen-2xl flex-1 px-4 pb-8 pt-5 sm:px-6 sm:pt-7 lg:px-8'>
-              <DemoNotice>
-                Fictional demo data only · No university has approved a pilot or endorsed this
-                concept.
-              </DemoNotice>
+              {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && (
+                <DemoNotice>
+                  Fictional demo data only · No university has approved a pilot or endorsed this
+                  concept.
+                </DemoNotice>
+              )}
               <div className='mt-6 sm:mt-8'>{children}</div>
             </div>
             <footer className='border-t border-border px-4 py-3 text-center text-[10px] text-muted-foreground sm:px-6'>

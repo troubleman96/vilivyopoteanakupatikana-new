@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { isApiConfigured } from '@/lib/api';
+import { isApiConfigured, isDemoModeEnabled } from '@/lib/api';
 import { demoActivity, demoCases, demoInstitutions, demoItems } from '@/lib/demo-data';
 import {
   ActionLink,
@@ -599,7 +599,17 @@ function CaseRows({
 }
 
 export function CaseQueueView() {
-  return isApiConfigured() ? <StaffCaseQueue /> : <DemoCaseQueueView />;
+  if (isApiConfigured()) return <StaffCaseQueue />;
+  if (isDemoModeEnabled()) return <DemoCaseQueueView />;
+  return (
+    <div role='status' className='rounded-2xl border border-border bg-card p-6'>
+      <PageHeading
+        eyebrow='LIVE SERVICE UNAVAILABLE'
+        title='The case queue is not connected'
+        description='Sample records are disabled. Connect the API or explicitly enable local preview mode to use this page.'
+      />
+    </div>
+  );
 }
 
 function DemoCaseQueueView() {

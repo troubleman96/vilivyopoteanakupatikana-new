@@ -23,8 +23,9 @@ api-test:
 	cd services/api && go test ./...
 
 api-test-50:
-	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to a dedicated local database whose name contains _test" >&2; exit 1)
-	@cd services/api && TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIsolation$$' -count=1 -v
+	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to a dedicated local owner connection for a database whose name contains _test" >&2; exit 1)
+	@test -n "$(TEST_APP_DATABASE_URL)" || (echo "Set TEST_APP_DATABASE_URL to the non-owner app role for that same test database" >&2; exit 1)
+	@cd services/api && TEST_DATABASE_URL="$(TEST_DATABASE_URL)" TEST_APP_DATABASE_URL="$(TEST_APP_DATABASE_URL)" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIdentityHardening$$' -count=1 -v
 
 ai-setup:
 	python3 -m pip install -e 'services/ai[test]'

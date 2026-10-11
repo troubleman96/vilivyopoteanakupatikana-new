@@ -1,19 +1,28 @@
 # Lost-and-found API (MVP)
 
-A Go modular-monolith API for a multi-institution Tanzania lost-and-found service. This is an implementation scaffold, **not production-ready**. `Example University` and all demo records are synthetic. DIT is not represented as an approved pilot.
+A Go modular-monolith API for a multi-institution Tanzania lost-and-found service. This is an implementation scaffold, **not production-ready**. Demo records are synthetic, are not inserted into PostgreSQL, and are not returned as an API fallback. DIT is not represented as an approved pilot.
 
 ## Local PostgreSQL setup
 
-Requirements: Go 1.22+, PostgreSQL 14+. Set `DATABASE_URL`, apply migrations, then run the API:
+Requirements: Go 1.22+, PostgreSQL 14+. Migrations run with an owner/migration connection and provision a separate non-owner, `NOBYPASSRLS` API login. Use a strong URL-safe runtime password (or percent-encode it in `DATABASE_URL`):
 
 ```sh
 cd services/api
-export DATABASE_URL='postgres://vilivyopotea:local-only-password@127.0.0.1:5432/vilivyopotea?sslmode=disable'
+export DATABASE_URL='postgres://<migration-owner>:<owner-password>@127.0.0.1:5432/vilivyopotea?sslmode=disable'
+export APP_DATABASE_USER='vilivyopotea_app'
+export APP_DATABASE_PASSWORD='<strong-url-safe-secret>'
 go run ./cmd/migrate
+export DATABASE_URL='postgres://vilivyopotea_app:<strong-url-safe-secret>@127.0.0.1:5432/vilivyopotea?sslmode=disable'
 go run ./cmd/api
 ```
 
-The Docker image includes `/api` as its default entrypoint and `/migrate` as a one-shot schema migration executable. The Compose stack starts PostgreSQL, runs migrations, and then starts the API. No hosted identity service is used.
+The migration connection must be a trusted superuser (or equivalent role authorized to create `BYPASSRLS` roles) that can create/alter the application login and apply schema migrations. A separate `NOLOGIN` public-view owner has `BYPASSRLS` only so forced RLS cannot hide approved listings from the public view; it is granted only allow-listed public columns, owns the safe view and predicate, and has no role memberships. The application login is never a member of it and remains `NOBYPASSRLS`. Never run `/api` with the migration-owner credentials. The Docker image includes `/api` as its default entrypoint and `/migrate` as a one-shot schema migration executable. Compose starts PostgreSQL, runs migrations and grants, then starts the API using the restricted role. No hosted identity service is used.
+
+New database migrations do not insert sample institutions or listings. Upgrades also hide the three exact legacy seed listings in place; linked claims and unrelated institution/user records are preserved. When PostgreSQL is missing or unavailable, the API reports `503` for readiness and data routes instead of returning sample records. The browser’s synthetic dashboard preview is off by default; only enable `NEXT_PUBLIC_DEMO_MODE=true` for an isolated local preview, and never enable it for production.
+
+## Database tenant isolation
+
+Institution-scoped tables use PostgreSQL row-level security with `FORCE ROW LEVEL SECURITY`. The API opens transactions and sets user/institution context locally for each private or staff operation. Composite foreign keys reject cases or handovers connected to a different institution’s record. Anonymous listing and claim lookup use a database view that projects only approved public fields; the app role cannot use that view to select private item columns. The runtime role is non-owner, non-superuser, and `NOBYPASSRLS`. This database context assumes the API process and its database credentials are trusted; do not expose those credentials to browsers or other tenants.
 
 ## Identity and sessions
 
@@ -46,18 +55,21 @@ cd services/api
 go test ./... # Unit/API tests; skips the PostgreSQL integration suite unless opted in
 ```
 
-The opt-in integration suite creates **50 distinct synthetic accounts** and exercises verification/resend, Secure cookie flags and CSRF origin checks, registration/login throttling, password reset and session revocation, private report and claim isolation, tenant authorization, and the verified one-time handover flow. Point it only at a dedicated local database whose name contains `_test`:
+The opt-in integration suite creates **50 synthetic accounts** and synthetic institutions/items inside its dedicated local `_test` database. In addition to identity/session and handover tests, it verifies institution-level API isolation, row-security filtering, rejected cross-tenant writes, tenant-consistent foreign keys, and that the public database view contains no private columns. Supply an owner connection for fixture setup/cleanup and a separate non-owner app connection for API and RLS operations:
 
 ```sh
-createdb vilivyopotea_test
-export DATABASE_URL='postgres://<local-db-user>:<local-db-password>@127.0.0.1:5432/vilivyopotea_test?sslmode=disable'
-export TEST_DATABASE_URL="$DATABASE_URL"
+createdb vilivyopotea_phase2_test
+export TEST_DATABASE_URL='postgres://<local-db-owner>:<owner-password>@127.0.0.1:5432/vilivyopotea_phase2_test?sslmode=disable'
+export APP_DATABASE_USER='vilivyopotea_app'
+export APP_DATABASE_PASSWORD='<strong-url-safe-secret>'
+export DATABASE_URL="$TEST_DATABASE_URL"
 go run ./cmd/migrate
-TEST_DATABASE_URL="$TEST_DATABASE_URL" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIdentityHardening$' -count=1 -v
+export TEST_APP_DATABASE_URL='postgres://vilivyopotea_app:<strong-url-safe-secret>@127.0.0.1:5432/vilivyopotea_phase2_test?sslmode=disable'
+TEST_DATABASE_URL="$TEST_DATABASE_URL" TEST_APP_DATABASE_URL="$TEST_APP_DATABASE_URL" go test ./internal/api -run '^TestFiftyLocalPostgresAccountsAndIdentityHardening$' -count=1 -v
 ```
 
-The suite refuses non-local or non-`_test` database URLs and cleans up its synthetic users, reports, claims, memberships, outbox messages, and extra institution after it runs. For a fresh database, apply the included demo seed migration as well so that a reviewed synthetic item is available for the claim test.
+The suite refuses non-local or non-`_test` database URLs, rejects a superuser/owner/BYPASSRLS runtime role, and cleans up only the synthetic records it created. It never depends on pre-existing institutions or seeded listings; no demo seed is needed. Use only a disposable test database, never production.
 
 ## Security / rollout caveats
 
-Before deployment, complete institution onboarding and approval, privacy/legal review, a real email delivery provider and recovery runbook, rate-limit behavior behind the chosen edge/proxy, threat modeling, audit/monitoring, backup/restore, database least-privilege/RLS review, secure secret injection, outbox/token retention and deletion policies, and incident response. This MVP does not upload evidence; `evidence_reference` is private metadata only. Staff must independently verify ownership; AI output is never proof. Configure HTTPS at the deployment edge; session cookies always require `Secure`. The Go module path is `github.com/troubleman96/vilivyopoteanakupatikana-new/services/api`.
+Before deployment, complete institution onboarding and approval, privacy/legal review, a real email delivery provider and recovery runbook, rate-limit behavior behind the chosen edge/proxy, threat modeling, audit/monitoring, backup/restore, independent least-privilege/RLS review of the deployed role and policies, secure secret injection, outbox/token retention and deletion policies, and incident response. This MVP does not upload evidence; `evidence_reference` is private metadata only. Staff must independently verify ownership; AI output is never proof. Configure HTTPS at the deployment edge; session cookies always require `Secure`. The Go module path is `github.com/troubleman96/vilivyopoteanakupatikana-new/services/api`.

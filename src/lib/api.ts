@@ -1,6 +1,7 @@
 import type { LostFoundItem } from '@/lib/demo-data';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
+const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 type ApiEnvelope<T> = { data: T };
 
@@ -151,6 +152,9 @@ async function requestData<T>(
 
 export function isApiConfigured(): boolean {
   return API_BASE_URL.length > 0;
+}
+export function isDemoModeEnabled(): boolean {
+  return DEMO_MODE_ENABLED;
 }
 
 export async function registerLocalAccount(

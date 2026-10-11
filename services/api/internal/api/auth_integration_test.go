@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/auth"
 	"github.com/troubleman96/vilivyopoteanakupatikana-new/services/api/internal/store"
@@ -54,6 +56,18 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 		t.Fatal("TEST_DATABASE_URL must target localhost and a database name containing _test; use a dedicated disposable test database")
 	}
 
+	appDatabaseURL := os.Getenv("TEST_APP_DATABASE_URL")
+	if appDatabaseURL == "" {
+		t.Skip("set TEST_APP_DATABASE_URL to a local non-owner runtime role for the PostgreSQL row-security suite")
+	}
+	parsedApp, err := url.Parse(appDatabaseURL)
+	if err != nil || (parsedApp.Hostname() != "localhost" && parsedApp.Hostname() != "127.0.0.1") || !strings.Contains(parsedApp.Path, "_test") {
+		t.Fatal("TEST_APP_DATABASE_URL must target localhost and the same dedicated _test database")
+	}
+	if parsed.Path != parsedApp.Path || parsed.Hostname() != parsedApp.Hostname() {
+		t.Fatal("TEST_DATABASE_URL and TEST_APP_DATABASE_URL must target the same local test database")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -64,29 +78,57 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 	if err := pool.Ping(ctx); err != nil {
 		t.Fatal(err)
 	}
+	appPool, err := pgxpool.New(ctx, appDatabaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer appPool.Close()
+	if err := appPool.Ping(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var unsafeRole bool
+	if err := appPool.QueryRow(ctx, `SELECT r.rolsuper OR r.rolbypassrls OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='items' AND (c.relowner=r.oid OR pg_has_role(r.oid,c.relowner,'MEMBER'))) FROM pg_roles r WHERE r.rolname=current_user`).Scan(&unsafeRole); err != nil {
+		t.Fatal(err)
+	}
+	if unsafeRole {
+		t.Fatal("TEST_APP_DATABASE_URL must use a non-owner, non-superuser, NOBYPASSRLS role")
+	}
 	if _, err := pool.Exec(ctx, `DELETE FROM auth_rate_limits`); err != nil {
 		t.Fatalf("reset rate-limit state in the dedicated test database: %v", err)
 	}
-	var institutionID, publicItemID string
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM institutions WHERE active=true ORDER BY created_at LIMIT 1`).Scan(&institutionID); err != nil {
-		t.Fatalf("apply database migrations and seed an active synthetic institution first: %v", err)
-	}
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM items WHERE review_status='approved' AND visibility='public' ORDER BY created_at LIMIT 1`).Scan(&publicItemID); err != nil {
-		t.Fatalf("apply demo seed migration for the claim isolation test: %v", err)
-	}
-	var otherInstitutionID string
-	tag := fmt.Sprintf("auth1-%d", time.Now().UnixNano())
-	if err := pool.QueryRow(ctx, `INSERT INTO institutions(name,region) VALUES($1,'Synthetic test only') RETURNING id::text`, tag+"-other").Scan(&otherInstitutionID); err != nil {
+	tag := fmt.Sprintf("auth2-%d", time.Now().UnixNano())
+	var institutionID, otherInstitutionID string
+	if err := pool.QueryRow(ctx, `INSERT INTO institutions(name,region) VALUES($1,'Synthetic test only') RETURNING id::text`, tag+"-institution-a").Scan(&institutionID); err != nil {
 		t.Fatal(err)
 	}
-
-	apiServer := New(&store.Store{Pool: pool}, auth.Validator{Pool: pool, PublicAppURL: "http://localhost:3000", CookieSecure: true}, false, "")
+	if err := pool.QueryRow(ctx, `INSERT INTO institutions(name,region) VALUES($1,'Synthetic test only') RETURNING id::text`, tag+"-institution-b").Scan(&otherInstitutionID); err != nil {
+		t.Fatal(err)
+	}
+	insertSyntheticItem := func(institutionID, title string) (string, string) {
+		t.Helper()
+		var itemID string
+		err := pool.QueryRow(ctx, `INSERT INTO items(institution_id,reporter_id,kind,category,private_title,private_description,private_location,public_title,public_description,public_location,contact_details,status,review_status,visibility) VALUES($1,gen_random_uuid(),'found','synthetic-test',$2,'Synthetic private details','Synthetic private location',$3,'Synthetic approved public summary','Synthetic public location','','open','approved','public') RETURNING id::text`, institutionID, "Private "+title, title).Scan(&itemID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var caseID string
+		if err := pool.QueryRow(ctx, `INSERT INTO cases(item_id,institution_id,status) VALUES($1,$2,'open') RETURNING id::text`, itemID, institutionID).Scan(&caseID); err != nil {
+			t.Fatal(err)
+		}
+		return itemID, caseID
+	}
+	publicItemID, publicCaseID := insertSyntheticItem(institutionID, tag+"-public-item-a")
+	otherItemID, otherCaseID := insertSyntheticItem(otherInstitutionID, tag+"-private-item-b")
+	apiServer := New(&store.Store{Pool: appPool}, auth.Validator{Pool: appPool, PublicAppURL: "http://localhost:3000", CookieSecure: true}, "")
 	apiServer.CORSAllowedOrigins = []string{"http://localhost:3000"}
 	server := httptest.NewServer(integrationRemoteIPShim(apiServer))
 	defer server.Close()
 
 	accounts := make([]integrationAccount, 50)
-	userIDs := make([]string, 0, 50)
+	var userIDs []string
+	var handoverItemID, handoverCaseID string
+	testItemIDs := []string{publicItemID, otherItemID}
+	testCaseIDs := []string{publicCaseID, otherCaseID}
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cleanupCancel()
@@ -95,14 +137,22 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 		}
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM auth_email_outbox WHERE recipient LIKE $1`, tag+"-%@example.test")
 		for _, userID := range userIDs {
-			_, _ = pool.Exec(cleanupCtx, `DELETE FROM handovers h USING cases c, items i WHERE h.case_id=c.id AND c.item_id=i.id AND (i.reporter_id=$1 OR h.claim_id IN (SELECT id FROM claims WHERE claimant_id=$1))`, userID)
+			_, _ = pool.Exec(cleanupCtx, `DELETE FROM handovers WHERE recorded_by=$1 OR claim_id IN (SELECT id FROM claims WHERE claimant_id=$1)`, userID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM claims WHERE claimant_id=$1`, userID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE item_id IN (SELECT id FROM items WHERE reporter_id=$1)`, userID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM items WHERE reporter_id=$1`, userID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM institution_memberships WHERE user_id=$1`, userID)
 			_, _ = pool.Exec(cleanupCtx, `DELETE FROM app_users WHERE id=$1`, userID)
 		}
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM institutions WHERE id=$1`, otherInstitutionID)
+		for _, caseID := range testCaseIDs {
+			_, _ = pool.Exec(cleanupCtx, `DELETE FROM handovers WHERE case_id=$1`, caseID)
+			_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE id=$1`, caseID)
+		}
+		for _, itemID := range testItemIDs {
+			_, _ = pool.Exec(cleanupCtx, `DELETE FROM claims WHERE item_id=$1`, itemID)
+			_, _ = pool.Exec(cleanupCtx, `DELETE FROM items WHERE id=$1`, itemID)
+		}
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM institutions WHERE id IN ($1,$2)`, institutionID, otherInstitutionID)
 	}()
 
 	for i := range accounts {
@@ -320,8 +370,62 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 			t.Errorf("tenant boundary %q: status %d want %d response %s", test.name, status, test.want, body)
 		}
 	}
+	status, body := integrationRequest(t, accounts[0].client, http.MethodGet, server.URL+"/api/v1/staff/institutions/"+institutionID+"/cases", "cookie:"+accounts[0].cookie, nil)
+	if status != http.StatusOK || strings.Contains(string(body), otherCaseID) {
+		t.Fatalf("institution A staff queue exposed an institution B case: status %d response %s", status, body)
+	}
+	crossTenantURL := server.URL + "/api/v1/staff/institutions/" + institutionID + "/cases/" + otherCaseID
+	status, body = integrationRequest(t, accounts[0].client, http.MethodPatch, crossTenantURL, "cookie:"+accounts[0].cookie, map[string]string{"status": "matched"})
+	if status != http.StatusNotFound {
+		t.Fatalf("cross-tenant case update should be invisible to institution A: status %d response %s", status, body)
+	}
 
-	var handoverItemID, handoverCaseID string
+	tenantTx, err := appPool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tenantTx.Rollback(ctx) }()
+	if _, err := tenantTx.Exec(ctx, `SELECT set_config('app.user_id',$1,true),set_config('app.institution_id',$2,true)`, accounts[0].user.ID, institutionID); err != nil {
+		t.Fatal(err)
+	}
+	var privateTitle string
+	err = tenantTx.QueryRow(ctx, `SELECT private_title FROM items WHERE id=$1`, otherItemID).Scan(&privateTitle)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("institution A database role should receive no row for institution B private data; title=%q err=%v", privateTitle, err)
+	}
+	var publicTitle string
+	if err := tenantTx.QueryRow(ctx, `SELECT public_title FROM public_items WHERE id=$1`, otherItemID).Scan(&publicTitle); err != nil {
+		t.Fatalf("safe public projection should be visible through its restricted view: %v", err)
+	}
+	var privateColumnExposed bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='public_items' AND column_name IN ('private_title','private_description','private_location','contact_details','evidence_reference'))`).Scan(&privateColumnExposed); err != nil {
+		t.Fatal(err)
+	}
+	if privateColumnExposed {
+		t.Fatal("the public database view contains a private column")
+	}
+	var readerLogin, readerSuperuser, readerBypass, readerHasMembership, readerCanReadPrivate, readerCanReadPublic bool
+	if err := pool.QueryRow(ctx, `SELECT r.rolcanlogin,r.rolsuper,r.rolbypassrls,EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.roleid=r.oid OR m.member=r.oid),has_column_privilege(r.rolname,'items','private_title','SELECT'),has_column_privilege(r.rolname,'items','public_title','SELECT') FROM pg_roles r WHERE r.rolname='vilivyopotea_public_reader'`).Scan(&readerLogin, &readerSuperuser, &readerBypass, &readerHasMembership, &readerCanReadPrivate, &readerCanReadPublic); err != nil {
+		t.Fatal(err)
+	}
+	if readerLogin || readerSuperuser || !readerBypass || readerHasMembership || readerCanReadPrivate || !readerCanReadPublic {
+		t.Fatalf("public-view owner is not narrowly isolated: login=%t superuser=%t bypassrls=%t membership=%t private-column=%t public-column=%t", readerLogin, readerSuperuser, readerBypass, readerHasMembership, readerCanReadPrivate, readerCanReadPublic)
+	}
+
+	tagRows, err := tenantTx.Exec(ctx, `UPDATE cases SET status='matched' WHERE id=$1`, otherCaseID)
+	if err != nil || tagRows.RowsAffected() != 0 {
+		t.Fatalf("institution A database role changed an institution B case: rows=%d err=%v", tagRows.RowsAffected(), err)
+	}
+	_, err = tenantTx.Exec(ctx, `INSERT INTO handovers(case_id,institution_id,recorded_by,handover_at) VALUES($1,$2,$3,now())`, otherCaseID, institutionID, accounts[0].user.ID)
+	if err == nil {
+		t.Fatal("database row security accepted a cross-tenant handover")
+	}
+	_ = tenantTx.Rollback(ctx)
+	_, err = pool.Exec(ctx, `INSERT INTO cases(item_id,institution_id,status) VALUES($1,$2,'open')`, publicItemID, otherInstitutionID)
+	if err == nil {
+		t.Fatal("database composite foreign key accepted an item/case institution mismatch")
+	}
+
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO items(institution_id,reporter_id,kind,category,private_title,private_description,public_title,public_description,review_status,visibility)
 		 VALUES($1,$2,'found','test','synthetic test item','private fixture','Synthetic handover test item','Public-safe fixture','approved','public') RETURNING id::text`,
@@ -332,7 +436,9 @@ func TestFiftyLocalPostgresAccountsAndIdentityHardening(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO cases(item_id,institution_id,status) VALUES($1,$2,'open') RETURNING id::text`, handoverItemID, institutionID).Scan(&handoverCaseID); err != nil {
 		t.Fatal(err)
 	}
-	status, body := integrationRequest(t, accounts[1].client, http.MethodPost, server.URL+"/api/v1/me/claims", "cookie:"+accounts[1].cookie, map[string]string{"item_id": handoverItemID, "statement": "Synthetic proof for controlled handover."})
+	testItemIDs = append(testItemIDs, handoverItemID)
+	testCaseIDs = append(testCaseIDs, handoverCaseID)
+	status, body = integrationRequest(t, accounts[1].client, http.MethodPost, server.URL+"/api/v1/me/claims", "cookie:"+accounts[1].cookie, map[string]string{"item_id": handoverItemID, "statement": "Synthetic proof for controlled handover."})
 	var claim struct {
 		Data integrationRow `json:"data"`
 	}

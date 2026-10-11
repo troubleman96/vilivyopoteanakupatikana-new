@@ -1,5 +1,10 @@
 import { AccountView } from '@/components/vilivyopotea/views';
+import { DemoPreviewGate } from '@/components/vilivyopotea/demo-preview-gate';
 
 export default function AccountPage() {
-  return <AccountView />;
+  return (
+    <DemoPreviewGate>
+      <AccountView />
+    </DemoPreviewGate>
+  );
 }

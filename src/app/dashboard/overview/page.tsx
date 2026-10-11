@@ -1,5 +1,10 @@
 import { OverviewView } from '@/components/vilivyopotea/views';
+import { DemoPreviewGate } from '@/components/vilivyopotea/demo-preview-gate';
 
 export default function OverviewPage() {
-  return <OverviewView />;
+  return (
+    <DemoPreviewGate>
+      <OverviewView />
+    </DemoPreviewGate>
+  );
 }
